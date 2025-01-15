@@ -1,7 +1,7 @@
 /*
 Package geo provides earth geometry functions and constants.
 
-Copyright (c) 2018 - 2023 PhotoPrism UG. All rights reserved.
+Copyright (c) 2018 - 2024 PhotoPrism UG. All rights reserved.
 
 	This program is free software: you can redistribute it and/or modify
 	it under Version 3 of the GNU Affero General Public License (the "AGPL"):
@@ -25,5 +25,8 @@ Additional information can be found in our Developer Guide:
 package geo
 
 const (
-	EarthRadiusKm = 6371 // Earth radius in km
+	AverageEarthRadiusKm    = 6371.0                        // Global-average earth radius in km
+	AverageEarthRadiusMeter = AverageEarthRadiusKm * 1000.0 // Global-average earth radius in m
+	WGS84EarthRadiusKm      = 6378.137                      // WGS84 earth radius in km
+	WGS84EarthRadiusMeter   = WGS84EarthRadiusKm * 1000.0   // WGS84 earth radius in m
 )

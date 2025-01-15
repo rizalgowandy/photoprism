@@ -4,7 +4,7 @@ import (
 	"github.com/photoprism/photoprism/pkg/media"
 )
 
-// Default values.
+// Defaults.
 const (
 	Unknown      = ""
 	UnknownYear  = -1
@@ -15,19 +15,21 @@ const (
 	UnknownID    = "zz"
 )
 
-// Media content types.
+// Media types.
 const (
 	MediaUnknown  = ""
-	MediaImage    = string(media.Image)
-	MediaRaw      = string(media.Raw)
 	MediaAnimated = string(media.Animated)
+	MediaAudio    = string(media.Audio)
+	MediaDocument = string(media.Document)
+	MediaImage    = string(media.Image)
 	MediaLive     = string(media.Live)
-	MediaVideo    = string(media.Video)
+	MediaRaw      = string(media.Raw)
+	MediaSidecar  = string(media.Sidecar)
 	MediaVector   = string(media.Vector)
-	MediaText     = string(media.Text)
+	MediaVideo    = string(media.Video)
 )
 
-// Storage root folders.
+// Base folders.
 const (
 	RootUnknown   = ""
 	RootOriginals = "/"
@@ -37,14 +39,14 @@ const (
 	RootPath      = "/"
 )
 
-// Event type.
+// Event types.
 const (
 	Created = "created"
 	Updated = "updated"
 	Deleted = "deleted"
 )
 
-// Photo stack states.
+// Stacking states.
 const (
 	IsStacked   int8 = 1
 	IsStackable int8 = 0

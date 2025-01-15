@@ -3,19 +3,22 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize/english"
 	"github.com/gin-gonic/gin"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
-	"github.com/photoprism/photoprism/internal/get"
-	"github.com/photoprism/photoprism/internal/i18n"
 	"github.com/photoprism/photoprism/internal/mutex"
-	"github.com/photoprism/photoprism/internal/query"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
+	"github.com/photoprism/photoprism/internal/thumb/crop"
+	"github.com/photoprism/photoprism/pkg/clean"
+	"github.com/photoprism/photoprism/pkg/i18n"
 )
 
 // Checks if background worker runs less than once per hour.
@@ -68,15 +71,114 @@ func findFileMarker(c *gin.Context) (file *entity.File, marker *entity.Marker, e
 	return file, marker, nil
 }
 
-// UpdateMarker updates an existing file marker e.g. representing a face.
+// CreateMarker adds a new file area marker to assign faces or other subjects.
+//
+// See internal/form/marker.go for the values required to create a new marker.
+//
+//	@Tags Files
+//	@Router	/api/v1/markers [post]
+func CreateMarker(router *gin.RouterGroup) {
+	router.POST("/markers", func(c *gin.Context) {
+		s := Auth(c, acl.ResourceFiles, acl.ActionUpdate)
+
+		// Abort if permission was not granted.
+		if s.Abort(c) {
+			return
+		}
+
+		// Initialize form.
+		frm := form.Marker{
+			FileUID:       "",
+			MarkerType:    entity.MarkerFace,
+			MarkerSrc:     entity.SrcManual,
+			MarkerReview:  false,
+			MarkerInvalid: false,
+		}
+
+		// Initialize form.
+		if err := c.BindJSON(&frm); err != nil {
+			log.Errorf("faces: %s (bind marker form)", err)
+			AbortBadRequest(c)
+			return
+		}
+
+		// Find related file.
+		file, err := query.FileByUID(frm.FileUID)
+
+		// Abort if not found.
+		if err != nil {
+			AbortEntityNotFound(c)
+			return
+		}
+
+		// Validate form values.
+		if err = frm.Validate(); err != nil {
+			log.Errorf("faces: %s (validate new marker)", err)
+			AbortBadRequest(c)
+			return
+		} else if frm.W <= 0 || frm.H <= 0 {
+			log.Errorf("faces: width and height must be greater than zero")
+			AbortBadRequest(c)
+			return
+		}
+
+		// Create new face marker area.
+		area := crop.NewArea("face", frm.X, frm.Y, frm.W, frm.H)
+
+		// Create new marker entity.
+		marker := entity.NewMarker(*file, area, "", frm.MarkerSrc, frm.MarkerType, int(frm.W*float32(file.FileWidth)), 100)
+
+		// Update marker from form values.
+		if err = marker.Create(); err != nil {
+			log.Errorf("faces: %s (create marker)", err)
+			AbortBadRequest(c)
+			return
+		}
+
+		// Update marker subject if a name was provided.
+		if strings.TrimSpace(frm.MarkerName) == "" {
+			log.Infof("faces: added new %s marker", clean.Log(marker.MarkerType))
+		} else if changed, saveErr := marker.SaveForm(frm); err != nil {
+			log.Errorf("faces: %s (update marker)", saveErr)
+			AbortSaveFailed(c)
+			return
+		} else if changed {
+			if updateErr := query.UpdateSubjectCovers(true); updateErr != nil {
+				log.Errorf("faces: %s (update covers)", updateErr)
+			}
+
+			if updateErr := entity.UpdateSubjectCounts(true); updateErr != nil {
+				log.Errorf("faces: %s (update counts)", updateErr)
+			}
+		}
+
+		// Update photo metadata.
+		if !file.FilePrimary {
+			log.Infof("faces: skipped updating photo for non-primary file")
+		} else if p, err := query.PhotoByUID(file.PhotoUID); err != nil {
+			log.Errorf("faces: %s (find photo))", err)
+		} else if err := p.UpdateAndSaveTitle(); err != nil {
+			log.Errorf("faces: %s (update photo title)", err)
+		} else {
+			// Publish updated photo entity.
+			PublishPhotoEvent(StatusUpdated, file.PhotoUID, c)
+		}
+
+		// Display success message.
+		event.SuccessMsg(i18n.MsgChangesSaved)
+
+		// Return new marker.
+		c.JSON(http.StatusOK, marker)
+	})
+}
+
+// UpdateMarker updates an existing file area marker to assign faces or other subjects.
+//
+// The request parameters are:
+//
+//   - marker_uid: string Marker UID as returned by the API
 //
 // PUT /api/v1/markers/:marker_uid
-//
-// Parameters:
-//
-//	uid: string Photo UID as returned by the API
-//	file_uid: string File UID as returned by the API
-//	id: int Marker ID as returned by the API
 func UpdateMarker(router *gin.RouterGroup) {
 	router.PUT("/markers/:marker_uid", func(c *gin.Context) {
 		// Abort if workers runs less than once per hour.
@@ -100,21 +202,28 @@ func UpdateMarker(router *gin.RouterGroup) {
 		}
 
 		// Initialize form.
-		f, err := form.NewMarker(*marker)
+		frm, err := form.NewMarker(*marker)
 
 		if err != nil {
-			log.Errorf("faces: %s (create marker update form)", err)
+			log.Errorf("faces: %s (create marker form)", err)
 			AbortSaveFailed(c)
 			return
-		} else if err := c.BindJSON(&f); err != nil {
-			log.Errorf("faces: %s (set updated marker values)", err)
+		} else if err = c.BindJSON(&frm); err != nil {
+			log.Errorf("faces: %s (bind marker form)", err)
+			AbortBadRequest(c)
+			return
+		}
+
+		// Validate form values.
+		if err = frm.Validate(); err != nil {
+			log.Errorf("faces: %s (validate updated marker)", err)
 			AbortBadRequest(c)
 			return
 		}
 
 		// Update marker from form values.
-		if changed, err := marker.SaveForm(f); err != nil {
-			log.Errorf("faces: %s (update marker)", err)
+		if changed, saveErr := marker.SaveForm(frm); saveErr != nil {
+			log.Errorf("faces: %s (update marker)", saveErr)
 			AbortSaveFailed(c)
 			return
 		} else if changed {
@@ -126,12 +235,12 @@ func UpdateMarker(router *gin.RouterGroup) {
 				}
 			}
 
-			if err := query.UpdateSubjectCovers(); err != nil {
-				log.Errorf("faces: %s (update covers)", err)
+			if updateErr := query.UpdateSubjectCovers(true); updateErr != nil {
+				log.Errorf("faces: %s (update covers)", updateErr)
 			}
 
-			if err := entity.UpdateSubjectCounts(); err != nil {
-				log.Errorf("faces: %s (update counts)", err)
+			if updateErr := entity.UpdateSubjectCounts(true); updateErr != nil {
+				log.Errorf("faces: %s (update counts)", updateErr)
 			}
 		}
 
@@ -144,24 +253,26 @@ func UpdateMarker(router *gin.RouterGroup) {
 			log.Errorf("faces: %s (update photo title)", err)
 		} else {
 			// Notify clients.
-			PublishPhotoEvent(EntityUpdated, file.PhotoUID, c)
+			PublishPhotoEvent(StatusUpdated, file.PhotoUID, c)
 		}
 
+		// Display success message.
 		event.SuccessMsg(i18n.MsgChangesSaved)
 
+		// Return updated marker.
 		c.JSON(http.StatusOK, marker)
 	})
 }
 
 // ClearMarkerSubject removes an existing marker subject association.
 //
+// The request parameters are:
+//
+//   - uid: string Photo UID as returned by the API
+//   - file_uid: string File UID as returned by the API
+//   - id: int Marker ID as returned by the API
+//
 // DELETE /api/v1/markers/:marker_uid/subject
-//
-// Parameters:
-//
-//	uid: string Photo UID as returned by the API
-//	file_uid: string File UID as returned by the API
-//	id: int Marker ID as returned by the API
 func ClearMarkerSubject(router *gin.RouterGroup) {
 	router.DELETE("/markers/:marker_uid/subject", func(c *gin.Context) {
 		// Abort if workers runs less than once per hour.
@@ -188,9 +299,9 @@ func ClearMarkerSubject(router *gin.RouterGroup) {
 			log.Errorf("faces: %s (clear marker subject)", err)
 			AbortSaveFailed(c)
 			return
-		} else if err := query.UpdateSubjectCovers(); err != nil {
+		} else if err := query.UpdateSubjectCovers(true); err != nil {
 			log.Errorf("faces: %s (update covers)", err)
-		} else if err := entity.UpdateSubjectCounts(); err != nil {
+		} else if err := entity.UpdateSubjectCounts(true); err != nil {
 			log.Errorf("faces: %s (update counts)", err)
 		}
 
@@ -203,7 +314,7 @@ func ClearMarkerSubject(router *gin.RouterGroup) {
 			log.Errorf("faces: %s (update photo title)", err)
 		} else {
 			// Notify clients.
-			PublishPhotoEvent(EntityUpdated, file.PhotoUID, c)
+			PublishPhotoEvent(StatusUpdated, file.PhotoUID, c)
 		}
 
 		event.SuccessMsg(i18n.MsgChangesSaved)

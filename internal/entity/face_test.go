@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/photoprism/photoprism/internal/face"
+	"github.com/photoprism/photoprism/internal/ai/face"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -131,7 +131,7 @@ func TestFace_ReviseMatches(t *testing.T) {
 }
 
 func TestNewFace(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		marker := MarkerFixtures.Get("1000003-4")
 		e := marker.Embeddings()
 
@@ -165,7 +165,7 @@ func TestFace_Unsuitable(t *testing.T) {
 }
 
 func TestFace_SetEmbeddings(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		marker := MarkerFixtures.Get("1000003-4")
 		e := marker.Embeddings()
 		m := FaceFixtures.Get("joe-biden")
@@ -180,7 +180,7 @@ func TestFace_SetEmbeddings(t *testing.T) {
 }
 
 func TestFace_Embedding(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		m := FaceFixtures.Get("joe-biden")
 
 		assert.Equal(t, 0.10730543085474682, m.Embedding()[0])
@@ -273,7 +273,7 @@ func TestFirstOrCreateFace(t *testing.T) {
 	t.Run("return existing entity", func(t *testing.T) {
 		m := FaceFixtures.Pointer("joe-biden")
 		r := FirstOrCreateFace(m)
-		assert.Equal(t, "jqy3y652h8njw0sx", r.SubjUID)
+		assert.Equal(t, "js6sg6b2h8njw0sx", r.SubjUID)
 		assert.Equal(t, 33, r.Samples)
 	})
 }

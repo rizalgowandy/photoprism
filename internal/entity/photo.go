@@ -12,7 +12,7 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/ulule/deepcopier"
 
-	"github.com/photoprism/photoprism/internal/classify"
+	"github.com/photoprism/photoprism/internal/ai/classify"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
 	"github.com/photoprism/photoprism/pkg/clean"
@@ -31,19 +31,6 @@ var MetadataUpdateInterval = 24 * 3 * time.Hour   // 3 Days
 var MetadataEstimateInterval = 24 * 7 * time.Hour // 7 Days
 
 var photoMutex = sync.Mutex{}
-
-type Photos []Photo
-
-// UIDs returns a slice of photo UIDs.
-func (m Photos) UIDs() []string {
-	result := make([]string, len(m))
-
-	for i, el := range m {
-		result[i] = el.PhotoUID
-	}
-
-	return result
-}
 
 // MapKey returns a key referencing time and location for indexing.
 func MapKey(takenAt time.Time, cellId string) string {
@@ -78,8 +65,8 @@ type Photo struct {
 	CellID           string        `gorm:"type:VARBINARY(42);index;default:'zz'" json:"CellID" yaml:"-"`
 	CellAccuracy     int           `json:"CellAccuracy" yaml:"CellAccuracy,omitempty"`
 	PhotoAltitude    int           `json:"Altitude" yaml:"Altitude,omitempty"`
-	PhotoLat         float32       `gorm:"type:FLOAT;index;" json:"Lat" yaml:"Lat,omitempty"`
-	PhotoLng         float32       `gorm:"type:FLOAT;index;" json:"Lng" yaml:"Lng,omitempty"`
+	PhotoLat         float64       `gorm:"type:DOUBLE;index;" json:"Lat" yaml:"Lat,omitempty"`
+	PhotoLng         float64       `gorm:"type:DOUBLE;index;" json:"Lng" yaml:"Lng,omitempty"`
 	PhotoCountry     string        `gorm:"type:VARBINARY(2);index:idx_photos_country_year_month;default:'zz'" json:"Country" yaml:"-"`
 	PhotoYear        int           `gorm:"index:idx_photos_ymd;index:idx_photos_country_year_month;" json:"Year" yaml:"Year"`
 	PhotoMonth       int           `gorm:"index:idx_photos_ymd;index:idx_photos_country_year_month;" json:"Month" yaml:"Month"`
@@ -103,7 +90,7 @@ type Photo struct {
 	Cell             *Cell         `gorm:"association_autoupdate:false;association_autocreate:false;association_save_reference:false" json:"Cell" yaml:"-"`
 	Place            *Place        `gorm:"association_autoupdate:false;association_autocreate:false;association_save_reference:false" json:"Place" yaml:"-"`
 	Keywords         []Keyword     `json:"-" yaml:"-"`
-	Albums           []Album       `json:"-" yaml:"-"`
+	Albums           []Album       `json:"Albums" yaml:"-"`
 	Files            []File        `yaml:"-"`
 	Labels           []PhotoLabel  `yaml:"-"`
 	CreatedBy        string        `gorm:"type:VARBINARY(42);index" json:"CreatedBy,omitempty" yaml:"CreatedBy,omitempty"`
@@ -194,8 +181,8 @@ func SavePhotoForm(model Photo, form form.Photo) error {
 		details.Keywords = strings.Join(txt.UniqueWords(w), ", ")
 	}
 
-	if err := model.SyncKeywordLabels(); err != nil {
-		log.Errorf("photo: %s %s while syncing keywords and labels", model.String(), err)
+	if err := model.UpdateLabels(); err != nil {
+		log.Errorf("photo: %s %s while updating labels", model.String(), err)
 	}
 
 	if err := model.UpdateTitle(model.ClassifyLabels()); err != nil {
@@ -206,7 +193,7 @@ func SavePhotoForm(model Photo, form form.Photo) error {
 		log.Errorf("photo: %s %s while indexing keywords", model.String(), err.Error())
 	}
 
-	edited := TimeStamp()
+	edited := Now()
 	model.EditedAt = &edited
 	model.PhotoQuality = model.QualityScore()
 
@@ -222,8 +209,40 @@ func SavePhotoForm(model Photo, form form.Photo) error {
 	return nil
 }
 
+// GetID returns the numeric entity ID.
+func (m *Photo) GetID() uint {
+	return m.ID
+}
+
+// HasID checks if the photo has an id and uid assigned to it.
+func (m *Photo) HasID() bool {
+	if m == nil {
+		return false
+	}
+
+	return m.ID > 0 && m.HasUID()
+}
+
+// HasUID checks if the photo has a valid UID.
+func (m *Photo) HasUID() bool {
+	if m == nil {
+		return false
+	}
+
+	return rnd.IsUID(m.PhotoUID, PhotoUID)
+}
+
+// GetUID returns the unique entity id.
+func (m *Photo) GetUID() string {
+	return m.PhotoUID
+}
+
 // String returns the id or name as string.
 func (m *Photo) String() string {
+	if m == nil {
+		return "Photo<nil>"
+	}
+
 	if m.PhotoName != "" {
 		return clean.Log(path.Join(m.PhotoPath, m.PhotoName))
 	} else if m.OriginalName != "" {
@@ -234,7 +253,7 @@ func (m *Photo) String() string {
 		return fmt.Sprintf("id %d", m.ID)
 	}
 
-	return "(unknown)"
+	return "*Photo"
 }
 
 // FirstOrCreate fetches an existing row from the database or inserts a new one.
@@ -288,6 +307,7 @@ func FindPhoto(find Photo) *Photo {
 
 	m := Photo{}
 
+	// Preload related entities if a matching record is found.
 	stmt := UnscopedDb().
 		Preload("Labels", func(db *gorm.DB) *gorm.DB {
 			return db.Order("photos_labels.uncertainty ASC, photos_labels.label_id DESC")
@@ -300,14 +320,14 @@ func FindPhoto(find Photo) *Photo {
 		Preload("Cell").
 		Preload("Cell.Place")
 
-	// Search for UID.
+	// Find photo by uid.
 	if rnd.IsUID(find.PhotoUID, PhotoUID) {
 		if stmt.First(&m, "photo_uid = ?", find.PhotoUID).Error == nil {
 			return &m
 		}
 	}
 
-	// Search for ID.
+	// Find photo by id.
 	if find.ID > 0 {
 		if stmt.First(&m, "id = ?", find.ID).Error == nil {
 			return &m
@@ -379,7 +399,7 @@ func (m *Photo) ClassifyLabels() classify.Labels {
 // BeforeCreate creates a random UID if needed before inserting a new row to the database.
 func (m *Photo) BeforeCreate(scope *gorm.Scope) error {
 	if m.TakenAt.IsZero() || m.TakenAtLocal.IsZero() {
-		now := TimeStamp()
+		now := Now()
 
 		if err := scope.SetColumn("TakenAt", now); err != nil {
 			return err
@@ -395,13 +415,14 @@ func (m *Photo) BeforeCreate(scope *gorm.Scope) error {
 	}
 
 	m.PhotoUID = rnd.GenerateUID(PhotoUID)
+
 	return scope.SetColumn("PhotoUID", m.PhotoUID)
 }
 
 // BeforeSave ensures the existence of TakenAt properties before indexing or updating a photo
 func (m *Photo) BeforeSave(scope *gorm.Scope) error {
 	if m.TakenAt.IsZero() || m.TakenAtLocal.IsZero() {
-		now := TimeStamp()
+		now := Now()
 
 		if err := scope.SetColumn("TakenAt", now); err != nil {
 			return err
@@ -425,15 +446,97 @@ func (m *Photo) RemoveKeyword(w string) error {
 	return nil
 }
 
-// SyncKeywordLabels maintains the label / photo relationship for existing labels and keywords.
-func (m *Photo) SyncKeywordLabels() error {
+// UpdateLabels updates labels that are automatically set based on the photo title, subject, and keywords.
+func (m *Photo) UpdateLabels() error {
+	if err := m.UpdateTitleLabels(); err != nil {
+		return err
+	}
+
+	if err := m.UpdateSubjectLabels(); err != nil {
+		return err
+	}
+
+	if err := m.UpdateKeywordLabels(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// UpdateTitleLabels updates the labels assigned based on the photo title.
+func (m *Photo) UpdateTitleLabels() error {
+	if m == nil {
+		return nil
+	} else if m.PhotoTitle == "" {
+		return nil
+	} else if SrcPriority[m.TitleSrc] < SrcPriority[SrcName] {
+		return nil
+	}
+
+	keywords := txt.UniqueKeywords(m.PhotoTitle)
+
+	var labelIds []uint
+
+	for _, w := range keywords {
+		if label, err := FindLabel(w, true); err == nil {
+			if label.Deleted() {
+				continue
+			}
+
+			labelIds = append(labelIds, label.ID)
+			FirstOrCreatePhotoLabel(NewPhotoLabel(m.ID, label.ID, 10, classify.SrcTitle))
+		}
+	}
+
+	return Db().Where("label_src = ? AND photo_id = ? AND label_id NOT IN (?)", classify.SrcTitle, m.ID, labelIds).Delete(&PhotoLabel{}).Error
+}
+
+// UpdateSubjectLabels updates the labels assigned based on photo subject metadata.
+func (m *Photo) UpdateSubjectLabels() error {
 	details := m.GetDetails()
+
+	if details == nil {
+		return nil
+	} else if details.Subject == "" {
+		return nil
+	} else if SrcPriority[details.SubjectSrc] < SrcPriority[SrcName] {
+		return nil
+	}
+
+	keywords := txt.UniqueKeywords(details.Subject)
+
+	var labelIds []uint
+
+	for _, w := range keywords {
+		if label, err := FindLabel(w, true); err == nil {
+			if label.Deleted() {
+				continue
+			}
+
+			labelIds = append(labelIds, label.ID)
+			FirstOrCreatePhotoLabel(NewPhotoLabel(m.ID, label.ID, 15, classify.SrcSubject))
+		}
+	}
+
+	return Db().Where("label_src = ? AND photo_id = ? AND label_id NOT IN (?)", classify.SrcSubject, m.ID, labelIds).Delete(&PhotoLabel{}).Error
+}
+
+// UpdateKeywordLabels updates the labels assigned based on photo keyword metadata.
+func (m *Photo) UpdateKeywordLabels() error {
+	details := m.GetDetails()
+
+	if details == nil {
+		return nil
+	} else if details.Keywords == "" {
+		return nil
+	}
+
 	keywords := txt.UniqueKeywords(details.Keywords)
 
 	var labelIds []uint
 
 	for _, w := range keywords {
-		if label := FindLabel(w); label != nil {
+		if label, err := FindLabel(w, true); err == nil {
 			if label.Deleted() {
 				continue
 			}
@@ -468,7 +571,7 @@ func (m *Photo) IndexKeywords() error {
 		kw := FirstOrCreateKeyword(NewKeyword(w))
 
 		if kw == nil {
-			log.Errorf("index keyword should not be nil - possible bug")
+			log.Errorf("index keyword should not be nil - you may have found a bug")
 			continue
 		}
 
@@ -500,7 +603,7 @@ func (m *Photo) PreloadKeywords() {
 	q := Db().NewScope(nil).DB().
 		Table("keywords").
 		Select(`keywords.*`).
-		Joins("JOIN photos_keywords ON photos_keywords.keyword_id = keywords.id AND photos_keywords.photo_id = ?", m.ID).
+		Joins("JOIN photos_keywords pk ON pk.keyword_id = keywords.id AND pk.photo_id = ?", m.ID).
 		Order("keywords.keyword ASC")
 
 	Log("photo", "preload files", q.Scan(&m.Keywords).Error)
@@ -511,7 +614,7 @@ func (m *Photo) PreloadAlbums() {
 	q := Db().NewScope(nil).DB().
 		Table("albums").
 		Select(`albums.*`).
-		Joins("JOIN photos_albums ON photos_albums.album_uid = albums.album_uid AND photos_albums.photo_uid = ?", m.PhotoUID).
+		Joins("JOIN photos_albums pa ON pa.album_uid = albums.album_uid AND pa.photo_uid = ? AND pa.hidden = 0", m.PhotoUID).
 		Where("albums.deleted_at IS NULL").
 		Order("albums.album_title ASC")
 
@@ -523,11 +626,6 @@ func (m *Photo) PreloadMany() {
 	m.PreloadFiles()
 	m.PreloadKeywords()
 	m.PreloadAlbums()
-}
-
-// HasID tests if the photo has a database id and uid.
-func (m *Photo) HasID() bool {
-	return m.ID > 0 && m.PhotoUID != ""
 }
 
 // NoCameraSerial checks if the photo has no CameraSerial
@@ -588,7 +686,7 @@ func (m *Photo) AddLabels(labels classify.Labels) {
 		labelEntity := FirstOrCreateLabel(NewLabel(classifyLabel.Title(), classifyLabel.Priority))
 
 		if labelEntity == nil {
-			log.Errorf("index: label %s should not be nil - possible bug (%s)", clean.Log(classifyLabel.Title()), m)
+			log.Errorf("index: label %s should not be nil - you may have found a bug (%s)", clean.Log(classifyLabel.Title()), m)
 			continue
 		}
 
@@ -598,13 +696,13 @@ func (m *Photo) AddLabels(labels classify.Labels) {
 		}
 
 		if err := labelEntity.UpdateClassify(classifyLabel); err != nil {
-			log.Errorf("index: failed updating label %s (%s)", clean.Log(classifyLabel.Title()), err)
+			log.Errorf("index: failed to update label %s (%s)", clean.Log(classifyLabel.Title()), err)
 		}
 
 		photoLabel := FirstOrCreatePhotoLabel(NewPhotoLabel(m.ID, labelEntity.ID, classifyLabel.Uncertainty, classifyLabel.Source))
 
 		if photoLabel == nil {
-			log.Errorf("index: photo-label %d should not be nil - possible bug (%s)", labelEntity.ID, m)
+			log.Errorf("index: photo-label %d should not be nil - you may have found a bug (%s)", labelEntity.ID, m)
 			continue
 		}
 
@@ -640,7 +738,7 @@ func (m *Photo) SetDescription(desc, source string) {
 // SetCamera updates the camera.
 func (m *Photo) SetCamera(camera *Camera, source string) {
 	if camera == nil {
-		log.Warnf("photo: %s failed updating camera from source %s", m.String(), SrcString(source))
+		log.Warnf("photo: %s failed to update camera from source %s", m.String(), SrcString(source))
 		return
 	}
 
@@ -664,7 +762,7 @@ func (m *Photo) SetCamera(camera *Camera, source string) {
 // SetLens updates the lens.
 func (m *Photo) SetLens(lens *Lens, source string) {
 	if lens == nil {
-		log.Warnf("photo: %s failed updating lens from source %s", m.String(), SrcString(source))
+		log.Warnf("photo: %s failed to update lens from source %s", m.String(), SrcString(source))
 		return
 	}
 
@@ -684,18 +782,22 @@ func (m *Photo) SetLens(lens *Lens, source string) {
 func (m *Photo) SetExposure(focalLength int, fNumber float32, iso int, exposure, source string) {
 	hasPriority := SrcPriority[source] >= SrcPriority[m.CameraSrc]
 
-	if focalLength > 0 && (hasPriority || m.PhotoFocalLength <= 0) {
+	// Set focal length.
+	if focalLength > 0 && focalLength <= 128000 && (hasPriority || m.PhotoFocalLength <= 0) {
 		m.PhotoFocalLength = focalLength
 	}
 
-	if fNumber > 0 && (hasPriority || m.PhotoFNumber <= 0) {
+	// Set F number.
+	if fNumber > 0 && fNumber <= 256 && (hasPriority || m.PhotoFNumber <= 0) {
 		m.PhotoFNumber = fNumber
 	}
 
-	if iso > 0 && (hasPriority || m.PhotoIso <= 0) {
+	// Set ISO number.
+	if iso > 0 && iso <= 128000 && (hasPriority || m.PhotoIso <= 0) {
 		m.PhotoIso = iso
 	}
 
+	// Set exposure time.
 	if exposure != "" && (hasPriority || m.PhotoExposure == "") {
 		m.PhotoExposure = exposure
 	}
@@ -725,11 +827,17 @@ func (m *Photo) AllFiles() (files Files) {
 
 // Archive removes the photo from albums and flags it as archived (soft delete).
 func (m *Photo) Archive() error {
-	deletedAt := TimeStamp()
+	if !m.HasID() {
+		return fmt.Errorf("photo has no id")
+	} else if m.DeletedAt != nil {
+		return nil
+	}
+
+	deletedAt := Now()
 
 	if err := Db().Model(&PhotoAlbum{}).Where("photo_uid = ?", m.PhotoUID).UpdateColumn("hidden", true).Error; err != nil {
 		return err
-	} else if err := m.Update("deleted_at", deletedAt); err != nil {
+	} else if err = m.Update("deleted_at", deletedAt); err != nil {
 		return err
 	}
 
@@ -738,8 +846,14 @@ func (m *Photo) Archive() error {
 	return nil
 }
 
-// Restore removes the archive flag (undo soft delete).
+// Restore removes the photo from the archive (reverses soft delete).
 func (m *Photo) Restore() error {
+	if !m.HasID() {
+		return fmt.Errorf("photo has no id")
+	} else if m.DeletedAt == nil {
+		return nil
+	}
+
 	if err := m.Update("deleted_at", gorm.Expr("NULL")); err != nil {
 		return err
 	}
@@ -751,7 +865,7 @@ func (m *Photo) Restore() error {
 
 // Delete deletes the photo from the index.
 func (m *Photo) Delete(permanently bool) (files Files, err error) {
-	if m.ID < 1 || m.PhotoUID == "" {
+	if !m.HasID() {
 		return files, fmt.Errorf("invalid photo id %d / uid %s", m.ID, clean.Log(m.PhotoUID))
 	}
 
@@ -767,7 +881,7 @@ func (m *Photo) Delete(permanently bool) (files Files, err error) {
 		}
 	}
 
-	return files, m.Updates(map[string]interface{}{"DeletedAt": TimeStamp(), "PhotoQuality": -1})
+	return files, m.Updates(map[string]interface{}{"DeletedAt": Now(), "PhotoQuality": -1})
 }
 
 // DeletePermanently permanently removes a photo from the index.
@@ -828,7 +942,7 @@ func (m *Photo) React(user *User, reaction react.Emoji) error {
 		return m.UnReact(user)
 	}
 
-	return NewReaction(m.PhotoUID, user.UID()).React(reaction).Save()
+	return NewReaction(m.PhotoUID, user.GetUID()).React(reaction).Save()
 }
 
 // UnReact deletes a previous user reaction, if any.
@@ -837,7 +951,7 @@ func (m *Photo) UnReact(user *User) error {
 		return fmt.Errorf("unknown user")
 	}
 
-	if r := FindReaction(m.PhotoUID, user.UID()); r != nil {
+	if r := FindReaction(m.PhotoUID, user.GetUID()); r != nil {
 		return r.Delete()
 	}
 
@@ -878,14 +992,32 @@ func (m *Photo) SetStack(stack int8) {
 	}
 }
 
-// Approve approves a photo in review.
+// Approved checks if the photo is not in review.
+func (m *Photo) Approved() bool {
+	if !m.HasID() {
+		return false
+	} else if m.PhotoQuality >= 3 || m.PhotoType != MediaImage || m.EditedAt != nil {
+		return true
+	}
+
+	return false
+}
+
+// Approve approves the photo if it is in review.
 func (m *Photo) Approve() error {
-	if m.PhotoQuality >= 3 {
+	if !m.HasID() {
+		return fmt.Errorf("photo has no id")
+	} else if m.PhotoQuality >= 3 {
 		// Nothing to do.
 		return nil
 	}
 
-	edited := TimeStamp()
+	// Restore photo if archived.
+	if err := m.Restore(); err != nil {
+		return err
+	}
+
+	edited := Now()
 	m.EditedAt = &edited
 	m.PhotoQuality = m.QualityScore()
 

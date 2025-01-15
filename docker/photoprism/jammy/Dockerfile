@@ -1,7 +1,7 @@
 ##################################################### BUILD STAGE ######################################################
-FROM photoprism/develop:jammy as build
+FROM photoprism/develop:jammy AS build
 
-# Copyright © 2018 - 2023 PhotoPrism UG. All rights reserved.
+# Copyright © 2018 - 2024 PhotoPrism UG. All rights reserved.
 #
 # Questions? Email us at hello@photoprism.app or visit our website to learn
 # more about our team, products and services: https://www.photoprism.app/
@@ -26,7 +26,7 @@ FROM photoprism/develop:jammy-slim
 # See: https://github.com/opencontainers/image-spec/blob/main/annotations.md
 LABEL org.opencontainers.image.title="PhotoPrism® (Ubuntu 22.04 LTS)"
 LABEL org.opencontainers.image.description="Ubuntu 22.04 LTS (Jammy Jellyfish)"
-LABEL org.opencontainers.image.url="https://hub.docker.com/repository/docker/photoprism/photoprism"
+LABEL org.opencontainers.image.url="https://hub.docker.com/r/photoprism/photoprism"
 LABEL org.opencontainers.image.source="https://github.com/photoprism/photoprism"
 LABEL org.opencontainers.image.documentation="https://docs.photoprism.app/getting-started/"
 LABEL org.opencontainers.image.authors="PhotoPrism UG <hello@photoprism.app>"
@@ -43,6 +43,7 @@ ENV PHOTOPRISM_ARCH=$TARGETARCH \
     TMPDIR="/tmp" \
     DEBIAN_FRONTEND="noninteractive" \
     TF_CPP_MIN_LOG_LEVEL="2" \
+    MALLOC_ARENA_MAX="4" \
     PROG="photoprism" \
     PHOTOPRISM_ASSETS_PATH="/opt/photoprism/assets" \
     PHOTOPRISM_IMPORT_PATH="/photoprism/import" \
@@ -57,7 +58,7 @@ ENV PHOTOPRISM_ARCH=$TARGETARCH \
     PHOTOPRISM_UPLOAD_NSFW="true" \
     PHOTOPRISM_DETECT_NSFW="false" \
     PHOTOPRISM_EXPERIMENTAL="false" \
-    PHOTOPRISM_SITE_URL="http://photoprism.me:2342/" \
+    PHOTOPRISM_SITE_URL="http://localhost:2342/" \
     PHOTOPRISM_SITE_CAPTION="AI-Powered Photos App" \
     PHOTOPRISM_SITE_DESCRIPTION="" \
     PHOTOPRISM_SITE_AUTHOR="" \
@@ -78,23 +79,17 @@ ENV PHOTOPRISM_ARCH=$TARGETARCH \
     PHOTOPRISM_DISABLE_FACES="false" \
     PHOTOPRISM_DISABLE_CLASSIFICATION="false" \
     PHOTOPRISM_RAW_PRESETS="false" \
-    PHOTOPRISM_THUMB_FILTER="lanczos" \
     PHOTOPRISM_THUMB_UNCACHED="false" \
-    PHOTOPRISM_THUMB_SIZE=2048 \
-    PHOTOPRISM_THUMB_SIZE_UNCACHED=7680 \
-    PHOTOPRISM_JPEG_SIZE=7680 \
-    PHOTOPRISM_JPEG_QUALITY=85 \
-    PHOTOPRISM_WORKERS=0 \
-    PHOTOPRISM_WAKEUP_INTERVAL=900 \
-    PHOTOPRISM_AUTO_INDEX=300 \
-    PHOTOPRISM_AUTO_IMPORT=300
+    PHOTOPRISM_AUTO_INDEX="300" \
+    PHOTOPRISM_AUTO_IMPORT="-1" \
+    PHOTOPRISM_INIT="https"
 
 # Copy scripts.
 COPY --chown=root:root --chmod=755 /scripts/dist/ /scripts/
 
 # Update pre-installed packages.
 RUN apt-get update && \
-    apt-get -qq upgrade && \
+    apt-get -qq dist-upgrade && \
     /scripts/cleanup.sh
 
 # Default working directory.

@@ -21,7 +21,7 @@ var GpsFloatRegexp = regexp.MustCompile("[+\\-]?(?:(?:0|[1-9]\\d*)(?:\\.\\d*)?|\
 
 // GpsToLatLng returns the GPS latitude and longitude as float point number.
 func GpsToLatLng(s string) (lat, lng float64) {
-	// Emtpy?
+	// Empty?
 	if s == "" {
 		return 0, 0
 	}
@@ -62,7 +62,7 @@ func GpsToLatLng(s string) (lat, lng float64) {
 
 // GpsToDecimal returns the GPS latitude or longitude as decimal float point number.
 func GpsToDecimal(s string) float64 {
-	// Emtpy?
+	// Empty?
 	if s == "" {
 		return 0
 	}
@@ -107,13 +107,13 @@ func ParseFloat(s string) float64 {
 }
 
 // NormalizeGPS normalizes the longitude and latitude of the GPS position to a generally valid range.
-func NormalizeGPS(lat, lng float64) (float32, float32) {
+func NormalizeGPS(lat, lng float64) (float64, float64) {
 	if lat < LatMax || lat > LatMax || lng < LngMax || lng > LngMax {
 		// Clip the latitude. Normalise the longitude.
 		lat, lng = clipLat(lat), normalizeLng(lng)
 	}
 
-	return float32(lat), float32(lng)
+	return lat, lng
 }
 
 func clipLat(lat float64) float64 {

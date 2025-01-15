@@ -18,39 +18,57 @@ import (
 )
 
 // ToAvc converts a single video file to MPEG-4 AVC.
-func (c *Convert) ToAvc(f *MediaFile, encoder ffmpeg.AvcEncoder, noMutex, force bool) (file *MediaFile, err error) {
+func (w *Convert) ToAvc(f *MediaFile, encoder ffmpeg.AvcEncoder, noMutex, force bool) (file *MediaFile, err error) {
+	// Abort if the source media file is nil.
 	if f == nil {
-		return nil, fmt.Errorf("convert: file is nil - possible bug")
+		return nil, fmt.Errorf("convert: file is nil - you may have found a bug")
 	}
 
+	// Abort if the source media file does not exist.
 	if !f.Exists() {
 		return nil, fmt.Errorf("convert: %s not found", clean.Log(f.RootRelName()))
 	} else if f.Empty() {
 		return nil, fmt.Errorf("convert: %s is empty", clean.Log(f.RootRelName()))
 	}
 
-	avcName := fs.VideoAVC.FindFirst(f.FileName(), []string{c.conf.SidecarPath(), fs.HiddenPath}, c.conf.OriginalsPath(), false)
+	// AVC video filename.
+	var avcName string
+
+	// Use .mp4 file extension for animated images and .avi for videos.
+	if f.IsAnimatedImage() {
+		avcName = fs.VideoMP4.FindFirst(f.FileName(), []string{w.conf.SidecarPath(), fs.PPHiddenPathname}, w.conf.OriginalsPath(), false)
+	} else {
+		avcName = fs.VideoAVC.FindFirst(f.FileName(), []string{w.conf.SidecarPath(), fs.PPHiddenPathname}, w.conf.OriginalsPath(), false)
+	}
 
 	mediaFile, err := NewMediaFile(avcName)
 
-	if err == nil && mediaFile.IsVideo() {
+	// Check if AVC file already exists.
+	if mediaFile == nil || err != nil {
+		// No, transcode video to AVC.
+	} else if mediaFile.IsVideo() {
+		// Yes, return AVC video file.
 		return mediaFile, nil
 	}
 
-	if !c.conf.SidecarWritable() {
+	// Check if the sidecar path is writeable, so a new AVC file can be created.
+	if !w.conf.SidecarWritable() {
 		return nil, fmt.Errorf("convert: transcoding disabled in read-only mode (%s)", f.RootRelName())
 	}
 
-	fileName := f.RelName(c.conf.OriginalsPath())
+	// Get relative filename for logging.
+	relName := f.RelName(w.conf.OriginalsPath())
 
+	// Use .mp4 file extension for animated images and .avi for videos.
 	if f.IsAnimatedImage() {
-		avcName = fs.FileName(f.FileName(), c.conf.SidecarPath(), c.conf.OriginalsPath(), fs.ExtMP4)
+		avcName, _ = fs.FileName(f.FileName(), w.conf.SidecarPath(), w.conf.OriginalsPath(), fs.ExtMP4)
 	} else {
-		avcName = fs.FileName(f.FileName(), c.conf.SidecarPath(), c.conf.OriginalsPath(), fs.ExtAVC)
+		avcName, _ = fs.FileName(f.FileName(), w.conf.SidecarPath(), w.conf.OriginalsPath(), fs.ExtAVC)
 	}
 
-	cmd, useMutex, err := c.AvcConvertCommand(f, avcName, encoder)
+	cmd, useMutex, err := w.AvcConvertCommand(f, avcName, encoder)
 
+	// Return if an error occurred.
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -58,10 +76,11 @@ func (c *Convert) ToAvc(f *MediaFile, encoder ffmpeg.AvcEncoder, noMutex, force 
 
 	// Make sure only one convert command runs at a time.
 	if useMutex && !noMutex {
-		c.cmdMutex.Lock()
-		defer c.cmdMutex.Unlock()
+		w.cmdMutex.Lock()
+		defer w.cmdMutex.Unlock()
 	}
 
+	// Check if target file already exists.
 	if fs.FileExists(avcName) {
 		avcFile, avcErr := NewMediaFile(avcName)
 		if avcErr != nil {
@@ -80,21 +99,23 @@ func (c *Convert) ToAvc(f *MediaFile, encoder ffmpeg.AvcEncoder, noMutex, force 
 	var stderr bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
-	cmd.Env = []string{fmt.Sprintf("HOME=%s", c.conf.CmdCachePath())}
+	cmd.Env = append(cmd.Env, []string{
+		fmt.Sprintf("HOME=%s", w.conf.CmdCachePath()),
+	}...)
 
 	event.Publish("index.converting", event.Data{
 		"fileType": f.FileType(),
-		"fileName": fileName,
-		"baseName": filepath.Base(fileName),
+		"fileName": relName,
+		"baseName": filepath.Base(relName),
 		"xmpName":  "",
 	})
 
-	log.Infof("%s: transcoding %s to %s", encoder, fileName, fs.VideoAVC)
+	log.Infof("%s: transcoding %s to %s", encoder, relName, fs.VideoAVC)
 
 	// Log exact command for debugging in trace mode.
 	log.Trace(cmd.String())
 
-	// Run convert command.
+	// Transcode source media file to AVC.
 	start := time.Now()
 	if err = cmd.Run(); err != nil {
 		if stderr.String() != "" {
@@ -107,50 +128,50 @@ func (c *Convert) ToAvc(f *MediaFile, encoder ffmpeg.AvcEncoder, noMutex, force 
 		}
 
 		// Log filename and transcoding time.
-		log.Warnf("%s: failed transcoding %s [%s]", encoder, fileName, time.Since(start))
+		log.Warnf("%s: failed to transcode %s [%s]", encoder, relName, time.Since(start))
 
 		// Remove broken video file.
 		if !fs.FileExists(avcName) {
 			// Do nothing.
 		} else if err = os.Remove(avcName); err != nil {
-			return nil, fmt.Errorf("convert: failed removing %s (%s)", clean.Log(RootRelName(avcName)), err)
+			return nil, fmt.Errorf("convert: failed to remove %s (%s)", clean.Log(RootRelName(avcName)), err)
 		}
 
 		// Try again using software encoder.
 		if encoder != ffmpeg.SoftwareEncoder {
-			return c.ToAvc(f, ffmpeg.SoftwareEncoder, true, false)
+			return w.ToAvc(f, ffmpeg.SoftwareEncoder, true, false)
 		} else {
 			return nil, err
 		}
 	}
 
-	// Log transcoding time.
+	// Log filename and transcoding time.
 	log.Infof("%s: created %s [%s]", encoder, filepath.Base(avcName), time.Since(start))
 
+	// Return AVC media file.
 	return NewMediaFile(avcName)
 }
 
 // AvcConvertCommand returns the command for converting video files to MPEG-4 AVC.
-func (c *Convert) AvcConvertCommand(f *MediaFile, avcName string, encoder ffmpeg.AvcEncoder) (result *exec.Cmd, useMutex bool, err error) {
+func (w *Convert) AvcConvertCommand(f *MediaFile, avcName string, encoder ffmpeg.AvcEncoder) (result *exec.Cmd, useMutex bool, err error) {
 	fileExt := f.Extension()
 	fileName := f.FileName()
 
 	switch {
 	case fileName == "":
-		return nil, false, fmt.Errorf("convert: %s video filename is empty - possible bug", f.FileType())
+		return nil, false, fmt.Errorf("convert: %s video filename is empty - you may have found a bug", f.FileType())
 	case !f.IsAnimated():
 		return nil, false, fmt.Errorf("convert: file type %s of %s cannot be transcoded", f.FileType(), clean.Log(f.BaseName()))
 	}
 
-	// Transcode animated WebP images with ImageMagick.
-	if f.IsWebP() && c.conf.ImageMagickEnabled() && c.imagemagickBlacklist.Allow(fileExt) {
-		return exec.Command(c.conf.ImageMagickBin(), f.FileName(), avcName), false, nil
+	// Try to transcode animated WebP images with ImageMagick.
+	if w.conf.ImageMagickEnabled() && f.IsWebP() && w.imageMagickExclude.Allow(fileExt) {
+		return exec.Command(w.conf.ImageMagickBin(), f.FileName(), avcName), false, nil
 	}
 
-	// Transcode all other formats with FFmpeg.
+	// Use FFmpeg to transcode all other media files to AVC.
 	var opt ffmpeg.Options
-
-	if opt, err = c.conf.FFmpegOptions(encoder, c.AvcBitrate(f)); err != nil {
+	if opt, err = w.conf.FFmpegOptions(encoder, w.AvcBitrate(f)); err != nil {
 		return nil, false, fmt.Errorf("convert: failed to transcode %s (%s)", clean.Log(f.BaseName()), err)
 	} else {
 		return ffmpeg.AvcConvertCommand(fileName, avcName, opt)
@@ -158,14 +179,14 @@ func (c *Convert) AvcConvertCommand(f *MediaFile, avcName string, encoder ffmpeg
 }
 
 // AvcBitrate returns the ideal AVC encoding bitrate in megabits per second.
-func (c *Convert) AvcBitrate(f *MediaFile) string {
+func (w *Convert) AvcBitrate(f *MediaFile) string {
 	const defaultBitrate = "8M"
 
 	if f == nil {
 		return defaultBitrate
 	}
 
-	limit := c.conf.FFmpegBitrate()
+	limit := w.conf.FFmpegBitrate()
 	quality := 12
 
 	bitrate := int(math.Ceil(float64(f.Width()*f.Height()*quality) / 1000000))

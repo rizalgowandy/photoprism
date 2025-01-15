@@ -5,7 +5,8 @@
     </div>
   </noscript>
   <div id="splash-info" class="has-js splash-info">
-    {{if .config.LegalInfo}}
+    {{if .error }}<span class="legal-info">{{ .error }}</span>
+    {{else if .config.LegalInfo}}
     {{if .config.LegalUrl}}<a href="{{ .config.LegalUrl }}" target="_blank" class="legal-info">{{ .config.LegalInfo }}</a>
     {{else}}<span class="legal-info">{{ .config.LegalInfo }}</span>{{end}}
     {{else}}
@@ -26,8 +27,8 @@
     <div class="splash-logo">
       {{template "logo.gohtml" .}}
     </div>
-    <progress id="progress" class="html-progress" max="100"></progress>
+    <progress id="progress" class="html-progress" max="100" style="accent-color: #c8c2e8; color-scheme: dark;"></progress>
   </div>
 </div>
 
-<div id="busy-overlay"><div class="splash-center"><progress id="busy-progress" class="html-progress" max="100"></progress></div></div>
+<div id="busy-overlay"><div class="splash-center"><progress id="busy-progress" class="html-progress" max="100" style="accent-color: #c8c2e8; color-scheme: dark;"></progress></div></div>

@@ -2,15 +2,19 @@ package entity
 
 import (
 	"github.com/jinzhu/gorm"
+
 	"github.com/photoprism/photoprism/internal/event"
-	"github.com/photoprism/photoprism/internal/maps"
+	"github.com/photoprism/photoprism/internal/service/maps"
 	"github.com/photoprism/photoprism/pkg/txt"
 )
 
 // altCountryNames defines mapping between different names for the same country
 var altCountryNames = map[string]string{
-	"United States of America": "USA",
-	"United States":            "USA",
+	"us":                       "United States",
+	"usa":                      "United States",
+	"US":                       "United States",
+	"USA":                      "United States",
+	"United States of America": "United States",
 	"":                         "Unknown",
 }
 

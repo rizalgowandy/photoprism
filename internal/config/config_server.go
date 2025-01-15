@@ -5,9 +5,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/photoprism/photoprism/internal/server/header"
-	"github.com/photoprism/photoprism/internal/thumb"
+	"github.com/photoprism/photoprism/internal/config/ttl"
+	"github.com/photoprism/photoprism/internal/server/limiter"
 	"github.com/photoprism/photoprism/pkg/fs"
+	"github.com/photoprism/photoprism/pkg/header"
 )
 
 const (
@@ -83,16 +84,6 @@ func (c *Config) HttpCompression() string {
 	return strings.ToLower(strings.TrimSpace(c.options.HttpCompression))
 }
 
-// HttpCacheMaxAge returns the time in seconds until cached content expires.
-func (c *Config) HttpCacheMaxAge() thumb.MaxAge {
-	if c.options.HttpCacheMaxAge < 1 || c.options.HttpCacheMaxAge > 31536000 {
-		// Default to one month.
-		return thumb.CacheMaxAge
-	}
-
-	return thumb.MaxAge(c.options.HttpCacheMaxAge)
-}
-
 // HttpCachePublic checks whether static content may be cached by a CDN or caching proxy.
 func (c *Config) HttpCachePublic() bool {
 	if c.options.HttpCachePublic {
@@ -102,10 +93,37 @@ func (c *Config) HttpCachePublic() bool {
 	return c.options.CdnUrl != ""
 }
 
+// HttpCacheMaxAge returns the time in seconds until cached content expires.
+func (c *Config) HttpCacheMaxAge() ttl.Duration {
+	// Return default cache maxage?
+	if c.options.HttpCacheMaxAge < 1 {
+		return ttl.CacheDefault
+	} else if c.options.HttpCacheMaxAge > 31536000 {
+		return ttl.Duration(31536000)
+	}
+
+	// Return the configured cache expiration time.
+	return ttl.Duration(c.options.HttpCacheMaxAge)
+}
+
+// HttpVideoMaxAge returns the time in seconds until cached videos expire.
+func (c *Config) HttpVideoMaxAge() ttl.Duration {
+	// Return default video maxage?
+	if c.options.HttpVideoMaxAge < 1 {
+		return ttl.CacheVideo
+	} else if c.options.HttpVideoMaxAge > 31536000 {
+		return ttl.Duration(31536000)
+	}
+
+	// Return the configured cache expiration time.
+	return ttl.Duration(c.options.HttpVideoMaxAge)
+}
+
 // HttpHost returns the built-in HTTP server host name or IP address (empty for all interfaces).
 func (c *Config) HttpHost() string {
+	// Set http host to "0.0.0.0" if unix socket is used to serve requests.
 	if c.options.HttpHost == "" {
-		return "0.0.0.0"
+		return limiter.DefaultIP
 	}
 
 	return c.options.HttpHost
@@ -118,6 +136,19 @@ func (c *Config) HttpPort() int {
 	}
 
 	return c.options.HttpPort
+}
+
+// HttpSocket tries to parse the HttpHost as a Unix socket path and returns an empty string otherwise.
+func (c *Config) HttpSocket() string {
+	if c.options.HttpSocket != "" {
+		// Do nothing.
+	} else if host := c.options.HttpHost; !strings.HasPrefix(host, "unix:") {
+		return ""
+	} else if strings.Contains(host, "/") {
+		c.options.HttpSocket = strings.TrimPrefix(host, "unix:")
+	}
+
+	return c.options.HttpSocket
 }
 
 // TemplatesPath returns the server templates path.
@@ -180,7 +211,7 @@ func (c *Config) TemplateExists(name string) bool {
 	}
 }
 
-// TemplateName returns the name of the default template (e.g. index.gohtml).
+// TemplateName returns the name of the user interface bootstrap template.
 func (c *Config) TemplateName() string {
 	if s := c.Settings(); s != nil {
 		if c.TemplateExists(s.Templates.Default) {
@@ -209,4 +240,9 @@ func (c *Config) BuildPath() string {
 // ImgPath returns the path to static image files.
 func (c *Config) ImgPath() string {
 	return filepath.Join(c.StaticPath(), "img")
+}
+
+// ThemePath returns the path to static theme files.
+func (c *Config) ThemePath() string {
+	return filepath.Join(c.ConfigPath(), "theme")
 }

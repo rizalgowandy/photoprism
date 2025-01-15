@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2018 - 2023 PhotoPrism UG. All rights reserved.
+Copyright (c) 2018 - 2024 PhotoPrism UG. All rights reserved.
 
     This program is free software: you can redistribute it and/or modify
     it under Version 3 of the GNU Affero General Public License (the "AGPL"):
@@ -132,6 +132,7 @@ export class Folder extends RestModel {
     if (!path || path[0] !== "/") {
       path = "/" + path;
     }
+
     return this.search(RootOriginals + path, params);
   }
 
@@ -143,8 +144,13 @@ export class Folder extends RestModel {
     if (!path || path[0] !== "/") {
       path = "/" + path;
     }
+
+    // "#" chars in path names must be explicitly escaped,
+    // see https://github.com/photoprism/photoprism/issues/3695
+    path = path.replaceAll(":", "%3A").replaceAll("#", "%23");
+
     return Api.get(this.getCollectionResource() + path, options).then((response) => {
-      let folders = response.data.folders;
+      let folders = response.data.folders ? response.data.folders : [];
       let files = response.data.files ? response.data.files : [];
 
       let count = folders.length + files.length;

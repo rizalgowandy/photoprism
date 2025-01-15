@@ -142,13 +142,13 @@ test.meta("testID", "sharing-001").meta({ mode: "auth" })(
       .notOk()
       .expect(toolbar.toolbarSecondTitle.withText("Albums").visible)
       .notOk()
-      .expect(Selector('svg[id="b14cd102-2241-4742-aeeb-4ebca536e025"]').visible)
+      .expect(Selector(".input-username input").visible)
       .ok();
   }
 );
 
 test.meta("testID", "sharing-002").meta({ type: "short", mode: "auth" })(
-  "Common: Verify anonymous user has limited options",
+  "Common: Verify visitor role has limited permissions",
   async (t) => {
     await t.navigateTo("http://localhost:2343/s/jxoux5ub1e/british-columbia-canada");
     await t.expect(toolbar.toolbarSecondTitle.withText("British Columbia").visible).ok();
@@ -180,6 +180,7 @@ test.meta("testID", "sharing-002").meta({ type: "short", mode: "auth" })(
     await photoviewer.checkPhotoViewerActionAvailability("edit", false);
 
     await photoviewer.triggerPhotoViewerAction("close");
+    await t.expect(Selector("#photo-viewer").visible).notOk();
 
     await photo.checkHoverActionAvailability("nth", 0, "favorite", false);
     await photo.checkHoverActionAvailability("nth", 0, "select", true);
@@ -193,11 +194,20 @@ test.meta("testID", "sharing-002").meta({ type: "short", mode: "auth" })(
       .notOk();
     await toolbar.triggerToolbarAction("view-mosaic");
     await toolbar.triggerToolbarAction("view-cards");
-    await page.cardLocation.nth(0);
+    await t.click(page.cardLocation.nth(0));
     await t.expect(places.placesSearch.visible).notOk();
     await t.expect(Selector('div[title="Cape / Bowen Island / 2019"]').visible).ok();
+    await t
+          .click(places.zoomOut)
+          .click(places.zoomOut)
+          .click(places.zoomOut)
+          .click(places.zoomOut);
+    await t.click(Selector("div.cluster-marker"));
+    await t.expect(places.openClusterInSearch.visible).notOk();
+    await t.expect(places.closeCluster.visible).ok();
 
-    await t.navigateTo("/library/states");
+
+      await t.navigateTo("/library/states");
 
     const AlbumUid = await album.getNthAlbumUid("all", 0);
     await album.triggerHoverAction("uid", AlbumUid, "select");

@@ -4,17 +4,16 @@ We welcome contributions of any kind, including blog posts, tutorials, testing, 
 
 ## Join the Community ##
 
-Follow us on [Twitter](https://link.photoprism.app/twitter) and join the [Community Chat](https://link.photoprism.app/chat)
-to get regular updates, connect with other contributors, and discuss your ideas. Our [Code of Conduct](https://www.photoprism.app/code-of-conduct) explains the "dos and don’ts" when interacting with other community members.
+Follow us on [Mastodon](https://floss.social/@photoprism), [Bluesky](https://bsky.app/profile/photoprism.app), or join the [Community Chat](https://link.photoprism.app/chat) to get regular updates, connect with other users, and discuss your ideas. Our [Code of Conduct](https://www.photoprism.app/code-of-conduct) explains the "dos and don’ts" when interacting with other community members.
 
-Feel free to [contact us](https://www.photoprism.app/contact) with anything that is on your mind. We appreciate your feedback! Due to the high volume of emails we receive, our team may be unable to get back to you immediately. We do our best to respond within five business days or less.
+As a [contributor](https://docs.photoprism.app/developer-guide/), you are also welcome to [contact us directly](https://www.photoprism.app/contact) if you have something on your mind that you don't want to discuss publicly. Please note, however, that due to the high volume of emails we receive, our team may be unable to get back to you immediately. We do our best to respond within five business days or less.
 
 ## Not a Developer? No Problem ##
 
 You can also contribute by…
 
 * answering questions in the [Community Chat](https://link.photoprism.app/chat), on [Reddit](https://link.photoprism.app/reddit) and in [GitHub Discussions](https://link.photoprism.app/discussions)
-* helping us [translate](https://docs.photoprism.app/developer-guide/translations-weblate/) the Web UI
+* helping us [translate](https://docs.photoprism.app/developer-guide/translations-weblate/) the Web UI on [Weblate](https://translate.photoprism.app/)
 * [conducting research](https://github.com/photoprism/photoprism/issues?q=is%3Aopen+is%3Aissue+label%3Aresearch) and [improving the documentation](https://github.com/photoprism/photoprism/issues?q=is%3Aopen+is%3Aissue+label%3Adocs)
 * publishing tutorials, blog posts, and podcasts
 * voting for us on pages like:

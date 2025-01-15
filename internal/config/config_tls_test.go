@@ -31,13 +31,29 @@ func TestConfig_TLSEmail(t *testing.T) {
 func TestConfig_TLSCert(t *testing.T) {
 	c := NewConfig(CliTestContext())
 
-	assert.True(t, strings.HasSuffix(c.TLSCert(), "photoprism.me.crt"))
-}
+	// Remember original values.
+	defaultTls := c.options.DefaultTLS
+	disableTls := c.options.DisableTLS
 
-func TestConfig_TLSKey(t *testing.T) {
-	c := NewConfig(CliTestContext())
+	c.options.DefaultTLS = false
+	c.options.DisableTLS = true
+	assert.Equal(t, "", c.TLSCert())
+	assert.Equal(t, "", c.TLSKey())
+	c.options.DisableTLS = false
+	assert.Equal(t, "", c.TLSCert())
+	assert.Equal(t, "", c.TLSKey())
+	c.options.DefaultTLS = true
+	assert.NotEmpty(t, c.TLSCert())
+	assert.NotEmpty(t, c.TLSKey())
+	assert.True(t, strings.HasSuffix(c.TLSCert(), "photoprism.crt"))
+	assert.True(t, strings.HasSuffix(c.TLSKey(), "photoprism.key"))
+	c.options.DefaultTLS = false
+	assert.Equal(t, "", c.TLSCert())
+	assert.Equal(t, "", c.TLSKey())
 
-	assert.True(t, strings.HasSuffix(c.TLSKey(), "photoprism.me.key"))
+	// Restore original values.
+	c.options.DefaultTLS = defaultTls
+	c.options.DisableTLS = disableTls
 }
 
 func TestConfig_TLS(t *testing.T) {
@@ -53,4 +69,10 @@ func TestConfig_DisableTLS(t *testing.T) {
 	c := NewConfig(CliTestContext())
 
 	assert.True(t, c.DisableTLS())
+}
+
+func TestConfig_DefaultTLS(t *testing.T) {
+	c := NewConfig(CliTestContext())
+
+	assert.False(t, c.DefaultTLS())
 }

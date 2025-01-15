@@ -2,8 +2,12 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -13,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/photoprism/photoprism/internal/config"
+	"github.com/photoprism/photoprism/pkg/header"
 )
 
 // Start the REST API server using the configuration provided
@@ -25,14 +30,14 @@ func Start(ctx context.Context, conf *config.Config) {
 
 	start := time.Now()
 
-	// Set HTTP server mode.
+	// Set web server mode.
 	if conf.HttpMode() != "" {
 		gin.SetMode(conf.HttpMode())
 	} else if conf.Debug() == false {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// Create new HTTP router engine without standard middleware.
+	// Create new router engine without standard middleware.
 	router := gin.New()
 
 	// Set proxy addresses from which headers related to the client and protocol can be trusted
@@ -40,81 +45,160 @@ func Start(ctx context.Context, conf *config.Config) {
 		log.Warnf("server: %s", err)
 	}
 
-	// Register common middleware.
-	router.Use(Recovery(), Security(conf), Logger())
+	// Register panic recovery middleware.
+	router.Use(Recovery())
 
-	// Create REST API router group.
-	APIv1 = router.Group(conf.BaseUri(config.ApiUri))
+	// Register logger middleware if debug mode is enabled.
+	if conf.Debug() {
+		router.Use(Logger())
+	}
 
-	// Initialize package extensions.
-	Ext().Init(router, conf)
-
-	// Enable HTTP compression?
+	// Register compression middleware if enabled in the configuration.
 	switch conf.HttpCompression() {
+	case "br", "brotli":
+		log.Infof("server: brotli compression is currently not supported")
 	case "gzip":
 		router.Use(gzip.Gzip(
 			gzip.DefaultCompression,
+			gzip.WithExcludedExtensions([]string{
+				".png", ".gif", ".jpeg", ".jpg", ".webp", ".mp3", ".mp4", ".zip", ".gz",
+			}),
 			gzip.WithExcludedPaths([]string{
+				conf.BaseUri("/health"),
 				conf.BaseUri(config.ApiUri + "/t"),
 				conf.BaseUri(config.ApiUri + "/folders/t"),
 				conf.BaseUri(config.ApiUri + "/zip"),
 				conf.BaseUri(config.ApiUri + "/albums"),
 				conf.BaseUri(config.ApiUri + "/labels"),
 				conf.BaseUri(config.ApiUri + "/videos"),
-			})))
+			}),
+		))
 		log.Infof("server: enabled gzip compression")
 	}
+
+	// Register security middleware.
+	router.Use(Security(conf))
+
+	// Create REST API router group.
+	APIv1 = router.Group(conf.BaseUri(config.ApiUri), Api(conf))
+
+	// Initialize package extensions.
+	Ext().Init(router, conf)
 
 	// Find and load templates.
 	router.LoadHTMLFiles(conf.TemplateFiles()...)
 
-	// Register HTTP route handlers.
+	// Register application routes.
 	registerRoutes(router, conf)
 
+	// Register "GET /health" route so clients can perform health checks.
+	router.GET(conf.BaseUri("/health"), func(c *gin.Context) {
+		c.Header(header.CacheControl, header.CacheControlNoStore)
+		c.Header(header.AccessControlAllowOrigin, header.Any)
+		c.String(http.StatusOK, "OK")
+	})
+
+	// Start web server.
 	var tlsErr error
 	var tlsManager *autocert.Manager
 	var server *http.Server
 
-	// Enable TLS?
-	if tlsManager, tlsErr = AutoTLS(conf); tlsErr == nil {
+	if unixSocket := conf.HttpSocket(); unixSocket != "" {
+		var listener net.Listener
+		var unixAddr *net.UnixAddr
+		var err error
+
+		if unixAddr, err = net.ResolveUnixAddr("unix", unixSocket); err != nil {
+			log.Errorf("server: invalid unix socket (%s)", err)
+			return
+		} else if listener, err = net.ListenUnix("unix", unixAddr); err != nil {
+			log.Errorf("server: failed to listen on unix socket (%s)", err)
+			return
+		} else {
+			server = &http.Server{
+				Addr:    unixSocket,
+				Handler: router,
+			}
+
+			log.Infof("server: listening on %s [%s]", unixSocket, time.Since(start))
+
+			go StartHttp(server, listener)
+		}
+	} else if tlsManager, tlsErr = AutoTLS(conf); tlsErr == nil {
+		log.Infof("server: starting in auto tls mode")
+
+		tlsSocket := fmt.Sprintf("%s:%d", conf.HttpHost(), conf.HttpPort())
+		tlsConfig := tlsManager.TLSConfig()
+		tlsConfig.MinVersion = tls.VersionTLS12
+
 		server = &http.Server{
-			Addr:      fmt.Sprintf("%s:%d", conf.HttpHost(), conf.HttpPort()),
-			TLSConfig: tlsManager.TLSConfig(),
+			Addr:      tlsSocket,
+			TLSConfig: tlsConfig,
 			Handler:   router,
 		}
-		log.Infof("server: starting in auto tls mode on %s [%s]", server.Addr, time.Since(start))
+
+		log.Infof("server: listening on %s [%s]", server.Addr, time.Since(start))
 		go StartAutoTLS(server, tlsManager, conf)
-	} else if publicCert, privateKey := conf.TLS(); publicCert != "" && privateKey != "" {
+	} else if publicCert, privateKey := conf.TLS(); unixSocket == "" && publicCert != "" && privateKey != "" {
 		log.Infof("server: starting in tls mode")
-		server = &http.Server{
-			Addr:    fmt.Sprintf("%s:%d", conf.HttpHost(), conf.HttpPort()),
-			Handler: router,
+
+		tlsSocket := fmt.Sprintf("%s:%d", conf.HttpHost(), conf.HttpPort())
+		tlsConfig := &tls.Config{
+			MinVersion: tls.VersionTLS12,
 		}
+
+		server = &http.Server{
+			Addr:      tlsSocket,
+			TLSConfig: tlsConfig,
+			Handler:   router,
+		}
+
 		log.Infof("server: listening on %s [%s]", server.Addr, time.Since(start))
 		go StartTLS(server, publicCert, privateKey)
 	} else {
 		log.Infof("server: %s", tlsErr)
-		server = &http.Server{
-			Addr:    fmt.Sprintf("%s:%d", conf.HttpHost(), conf.HttpPort()),
-			Handler: router,
+
+		tcpSocket := fmt.Sprintf("%s:%d", conf.HttpHost(), conf.HttpPort())
+
+		if listener, err := net.Listen("tcp", tcpSocket); err != nil {
+			log.Errorf("server: %s", err)
+			return
+		} else {
+			server = &http.Server{
+				Addr:    tcpSocket,
+				Handler: router,
+			}
+
+			log.Infof("server: listening on %s [%s]", server.Addr, time.Since(start))
+
+			go StartHttp(server, listener)
 		}
-		log.Infof("server: listening on %s [%s]", server.Addr, time.Since(start))
-		go StartHttp(server)
 	}
 
-	// Graceful HTTP server shutdown.
+	// Graceful web server shutdown.
 	<-ctx.Done()
 	log.Info("server: shutting down")
 	err := server.Close()
 	if err != nil {
 		log.Errorf("server: shutdown failed (%s)", err)
 	}
+
+	// Remove the Unix Domain Socket file if it exists on shutdown
+	if unixSocket := conf.HttpSocket(); unixSocket != "" {
+		if _, err := os.Stat(unixSocket); err == nil {
+			if err := os.Remove(unixSocket); err != nil {
+				log.Errorf("server: failed to remove unix socket file %s: %v", unixSocket, err)
+			} else {
+				log.Debugf("server: removed unix socket file %s", unixSocket)
+			}
+		}
+	}
 }
 
-// StartHttp starts the web server in http mode.
-func StartHttp(s *http.Server) {
-	if err := s.ListenAndServe(); err != nil {
-		if err == http.ErrServerClosed {
+// StartHttp starts the Web server in http mode.
+func StartHttp(s *http.Server, l net.Listener) {
+	if err := s.Serve(l); err != nil {
+		if errors.Is(err, http.ErrServerClosed) {
 			log.Info("server: shutdown complete")
 		} else {
 			log.Errorf("server: %s", err)
@@ -122,10 +206,10 @@ func StartHttp(s *http.Server) {
 	}
 }
 
-// StartTLS starts the web server in https mode.
+// StartTLS starts the Web server in https mode.
 func StartTLS(s *http.Server, httpsCert, privateKey string) {
 	if err := s.ListenAndServeTLS(httpsCert, privateKey); err != nil {
-		if err == http.ErrServerClosed {
+		if errors.Is(err, http.ErrServerClosed) {
 			log.Info("server: shutdown complete")
 		} else {
 			log.Errorf("server: %s", err)
@@ -133,7 +217,7 @@ func StartTLS(s *http.Server, httpsCert, privateKey string) {
 	}
 }
 
-// StartAutoTLS starts the web server with auto tls enabled.
+// StartAutoTLS starts the Web server with auto tls enabled.
 func StartAutoTLS(s *http.Server, m *autocert.Manager, conf *config.Config) {
 	var g errgroup.Group
 
@@ -146,7 +230,7 @@ func StartAutoTLS(s *http.Server, m *autocert.Manager, conf *config.Config) {
 	})
 
 	if err := g.Wait(); err != nil {
-		if err == http.ErrServerClosed {
+		if errors.Is(err, http.ErrServerClosed) {
 			log.Info("server: shutdown complete")
 		} else {
 			log.Errorf("server: %s", err)

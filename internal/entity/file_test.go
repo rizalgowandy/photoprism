@@ -6,12 +6,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/photoprism/photoprism/internal/customize"
-	"github.com/photoprism/photoprism/internal/face"
+	"github.com/photoprism/photoprism/internal/ai/face"
+	"github.com/photoprism/photoprism/internal/config/customize"
 	"github.com/photoprism/photoprism/pkg/clean"
-	"github.com/photoprism/photoprism/pkg/colors"
 	"github.com/photoprism/photoprism/pkg/fs"
-	"github.com/photoprism/photoprism/pkg/projection"
+	"github.com/photoprism/photoprism/pkg/media/colors"
+	"github.com/photoprism/photoprism/pkg/media/projection"
 )
 
 func TestFile_RegenerateIndex(t *testing.T) {
@@ -22,7 +22,7 @@ func TestFile_RegenerateIndex(t *testing.T) {
 		File{PhotoID: 1000039}.RegenerateIndex()
 	})
 	t.Run("PhotoUID", func(t *testing.T) {
-		File{PhotoUID: "pr2xu7myk7wrbk32"}.RegenerateIndex()
+		File{PhotoUID: "ps6sg6byk7wrbk32"}.RegenerateIndex()
 	})
 	t.Run("FirstFileByHash", func(t *testing.T) {
 		f, err := FirstFileByHash("2cad9168fa6acc5c5c2965ddf6ec465ca42fd818")
@@ -156,7 +156,7 @@ func TestFile_Create(t *testing.T) {
 		assert.Nil(t, file.Create())
 		assert.Error(t, file.Create())
 	})
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		photo := &Photo{TakenAtLocal: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC), PhotoTitle: "Berlin / Morning Mood"}
 
 		file := &File{Photo: photo, FileType: "jpg", FileSize: 500, PhotoID: 766, FileName: "testname", FileRoot: "xyz"}
@@ -170,14 +170,14 @@ func TestFile_Create(t *testing.T) {
 }
 
 func TestFile_Purge(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		file := &File{Photo: nil, FileType: "jpg", FileSize: 500}
 		assert.Equal(t, nil, file.Purge())
 	})
 }
 
 func TestFile_Found(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		file := &File{Photo: nil, FileType: "jpg", FileSize: 500}
 		assert.Equal(t, nil, file.Purge())
 		assert.Equal(t, true, file.FileMissing)
@@ -216,7 +216,7 @@ func TestFile_Save(t *testing.T) {
 
 		assert.Equal(t, "file 123: cannot save file with empty photo id", err.Error())
 	})
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		photo := &Photo{TakenAtLocal: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC), PhotoTitle: "Berlin / Morning Mood"}
 
 		file := &File{Photo: photo, FileType: "jpg", FileSize: 500, PhotoID: 766, FileName: "Food", FileRoot: "", UpdatedAt: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC)}
@@ -230,7 +230,7 @@ func TestFile_Save(t *testing.T) {
 }
 
 func TestFile_UpdateVideoInfos(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		file := &File{FileType: "jpg", FileWidth: 600, FileName: "VideoUpdate", PhotoID: 1000003}
 
 		assert.Equal(t, "1990/04/bridge2.mp4", FileFixturesExampleBridgeVideo.FileName)
@@ -252,13 +252,13 @@ func TestFile_UpdateVideoInfos(t *testing.T) {
 
 		for _, f := range files {
 			assert.Equal(t, "1990/04/bridge2.mp4", f.FileName)
-			assert.Equal(t, int(600), f.FileWidth)
+			assert.Equal(t, 1200, f.FileWidth)
 		}
 	})
 }
 
 func TestFile_Update(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		file := &File{FileType: "jpg", FileSize: 500, FileName: "ToBeUpdated", FileRoot: "", PhotoID: 5678}
 
 		err := file.Save()
@@ -282,7 +282,11 @@ func TestFile_Links(t *testing.T) {
 	t.Run("result", func(t *testing.T) {
 		file := FileFixturesExampleBridge
 		links := file.Links()
-		assert.Equal(t, "5jxf3jfn2k", links[0].LinkToken)
+		if len(links) == 0 {
+			t.Fatal("one link expected")
+		} else {
+			assert.Equal(t, "5jxf3jfn2k", links[0].LinkToken)
+		}
 	})
 }
 
@@ -364,7 +368,7 @@ func TestFile_SetProjection(t *testing.T) {
 		p := projection.New(" 幸福 Hanzi are logograms developed for the writing of Chinese! Expressions in an index may not ...!")
 		m.SetProjection(p.String())
 		assert.Equal(t, p.String(), m.FileProjection)
-		assert.GreaterOrEqual(t, clean.ClipType, len(m.FileProjection))
+		assert.GreaterOrEqual(t, clean.LengthType, len(m.FileProjection))
 	})
 }
 
@@ -400,7 +404,7 @@ func TestFile_Delete(t *testing.T) {
 }
 
 func TestPrimaryFile(t *testing.T) {
-	file, err := PrimaryFile("pt9jtdre2lvl0y17")
+	file, err := PrimaryFile("ps6sg6be2lvl0y17")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,7 +476,7 @@ func TestFile_DownloadName(t *testing.T) {
 }
 
 func TestFile_Undelete(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		file := &File{Photo: nil, FileType: "jpg", FileSize: 500}
 		assert.Equal(t, nil, file.Purge())
 		assert.Equal(t, true, file.FileMissing)
@@ -497,7 +501,7 @@ func TestFile_Undelete(t *testing.T) {
 
 func TestFile_AddFaces(t *testing.T) {
 	t.Run("Primary", func(t *testing.T) {
-		file := &File{FileUID: "fqzuh65p4sjk3kdn", FileHash: "346b3897eec9ef75e35fbf0bbc4c83c55ca41e31", FileType: "jpg", FileWidth: 720, FileName: "FacesTest", PhotoID: 1000003, FilePrimary: true}
+		file := &File{FileUID: "fs6sg6bp4sjk3kdn", FileHash: "346b3897eec9ef75e35fbf0bbc4c83c55ca41e31", FileType: "jpg", FileWidth: 720, FileName: "FacesTest", PhotoID: 1000003, FilePrimary: true}
 
 		faces := face.Faces{face.Face{
 			Rows:       480,
@@ -522,7 +526,7 @@ func TestFile_AddFaces(t *testing.T) {
 		assert.NotEmpty(t, file.Markers())
 	})
 	t.Run("NoEmbeddings", func(t *testing.T) {
-		file := &File{FileUID: "fqzuh65p4sjk3kd1", FileHash: "146b3897eec9ef75e35fbf0bbc4c83c55ca41e31", FileType: "jpg", FileWidth: 720, FileName: "FacesTest", PhotoID: 1000003, FilePrimary: false}
+		file := &File{FileUID: "fs6sg6bp4sjk3kd1", FileHash: "146b3897eec9ef75e35fbf0bbc4c83c55ca41e31", FileType: "jpg", FileWidth: 720, FileName: "FacesTest", PhotoID: 1000003, FilePrimary: false}
 
 		faces := face.Faces{face.Face{
 			Rows:      480,
@@ -550,7 +554,7 @@ func TestFile_ValidFaceCount(t *testing.T) {
 }
 
 func TestFile_Rename(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
 		m := FileFixtures.Get("exampleFileName.jpg")
 
 		assert.Equal(t, "2790/07/27900704_070228_D6D51B6C.jpg", m.FileName)
@@ -626,7 +630,7 @@ func TestFile_SubjectNames(t *testing.T) {
 func TestFile_UnsavedMarkers(t *testing.T) {
 	t.Run("bridge2.jpg", func(t *testing.T) {
 		m := FileFixtures.Get("bridge2.jpg")
-		assert.Equal(t, "ft2es49w15bnlqdw", m.FileUID)
+		assert.Equal(t, "fs6sg6bw15bnlqdw", m.FileUID)
 		assert.False(t, m.UnsavedMarkers())
 
 		markers := m.Markers()
@@ -637,7 +641,7 @@ func TestFile_UnsavedMarkers(t *testing.T) {
 		assert.False(t, m.UnsavedMarkers())
 		assert.False(t, markers.Unsaved())
 
-		newMarker := *NewMarker(m, cropArea1, "lt9k3pw1wowuy1c1", SrcManual, MarkerFace, 100, 65)
+		newMarker := *NewMarker(m, cropArea1, "ls6sg6b1wowuy1c1", SrcManual, MarkerFace, 100, 65)
 
 		markers.Append(newMarker)
 

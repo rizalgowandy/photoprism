@@ -15,17 +15,22 @@ import (
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/rnd"
+	"github.com/photoprism/photoprism/pkg/txt"
 )
 
 // PasswdCommand configures the command name, flags, and action.
 var PasswdCommand = cli.Command{
 	Name:      "passwd",
-	Usage:     "Changes the password of the user specified as argument",
+	Usage:     "Changes the local account password of a registered user",
 	ArgsUsage: "[username]",
 	Flags: []cli.Flag{
 		cli.BoolFlag{
 			Name:  "show, s",
-			Usage: "show bcrypt password hash",
+			Usage: "show bcrypt hash of new password",
+		},
+		cli.BoolFlag{
+			Name:  "remove, rm",
+			Usage: "remove password to disable local authentication",
 		},
 	},
 	Action: passwdAction,
@@ -63,16 +68,30 @@ func passwdAction(ctx *cli.Context) error {
 
 	if m == nil {
 		return fmt.Errorf("user %s not found", clean.LogQuote(id))
-	} else if m.Deleted() {
+	} else if m.IsDeleted() {
 		return fmt.Errorf("user %s has been deleted", clean.LogQuote(id))
 	}
 
-	log.Infof("please enter a new password for %s (minimum %d characters)\n", clean.Log(m.Username()), entity.PasswordLength)
+	// Remove account password if the --remove or --rm flag is set.
+	if ctx.Bool("remove") {
+		err = m.DeletePassword()
+
+		if err == nil {
+			log.Infof("password for %s has been removed", clean.Log(m.Username()))
+		}
+
+		return err
+	}
+
+	// Otherwise, update the account password.
+	log.Infof("please enter a new password for %s (%d-%d characters)\n", clean.Log(m.Username()), entity.PasswordLength, txt.ClipPassword)
 
 	newPassword := getPassword("New Password: ")
 
-	if len(newPassword) < 6 {
-		return errors.New("new password is too short, please try again")
+	if len([]rune(newPassword)) < entity.PasswordLength {
+		return fmt.Errorf("password must have at least %d characters", entity.PasswordLength)
+	} else if len(newPassword) > txt.ClipPassword {
+		return fmt.Errorf("password must have less than %d characters", txt.ClipPassword)
 	}
 
 	retypePassword := getPassword("Retype Password: ")
@@ -87,9 +106,9 @@ func passwdAction(ctx *cli.Context) error {
 
 	// Show bcrypt password hash?
 	if pw := entity.FindPassword(m.UserUID); ctx.Bool("show") && pw != nil {
-		log.Infof("password for %s successfully changed to %s\n", clean.Log(m.Username()), pw.Hash)
+		log.Infof("password for %s has been set to %s\n", clean.Log(m.Username()), pw.Hash)
 	} else {
-		log.Infof("password for %s successfully changed\n", clean.Log(m.Username()))
+		log.Infof("password for %s has been changed\n", clean.Log(m.Username()))
 	}
 
 	return nil

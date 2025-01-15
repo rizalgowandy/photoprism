@@ -7,8 +7,8 @@ import (
 
 	"github.com/dustin/go-humanize/english"
 
-	"github.com/photoprism/photoprism/internal/classify"
-	"github.com/photoprism/photoprism/internal/maps"
+	"github.com/photoprism/photoprism/internal/ai/classify"
+	"github.com/photoprism/photoprism/internal/service/maps"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/geo"
 	"github.com/photoprism/photoprism/pkg/txt"
@@ -16,7 +16,7 @@ import (
 )
 
 // SetCoordinates changes the photo lat, lng and altitude if not empty and from an acceptable source.
-func (m *Photo) SetCoordinates(lat, lng float32, altitude float64, source string) {
+func (m *Photo) SetCoordinates(lat, lng, altitude float64, source string) {
 	m.SetAltitude(altitude, source)
 
 	if lat == 0.0 && lng == 0.0 {
@@ -60,15 +60,15 @@ func (m *Photo) SetPosition(pos geo.Position, source string, force bool) {
 		return
 	}
 
-	if m.CellID != UnknownID && pos.InRange(float64(m.PhotoLat), float64(m.PhotoLng), geo.Meter*50) {
+	if m.CellID != UnknownID && pos.InRange(m.PhotoLat, m.PhotoLng, geo.Meter*50) {
 		log.Debugf("photo: %s keeps position %f, %f", m.String(), m.PhotoLat, m.PhotoLng)
 	} else {
 		if pos.Estimate {
 			pos.Randomize(geo.Meter * 5)
 		}
 
-		m.PhotoLat = float32(pos.Lat)
-		m.PhotoLng = float32(pos.Lng)
+		m.PhotoLat = pos.Lat
+		m.PhotoLng = pos.Lng
 		m.PlaceSrc = source
 		m.CellAccuracy = pos.Accuracy
 		m.SetAltitude(pos.Altitude, source)
@@ -78,7 +78,7 @@ func (m *Photo) SetPosition(pos geo.Position, source string, force bool) {
 		m.UpdateLocation()
 
 		if m.Place == nil {
-			log.Warnf("photo: failed updating position of %s", m)
+			log.Warnf("photo: failed to update position of %s", m)
 		} else {
 			log.Debugf("photo: approximate place of %s is %s (id %s)", m, clean.Log(m.Place.Label()), m.PlaceID)
 		}
@@ -86,8 +86,10 @@ func (m *Photo) SetPosition(pos geo.Position, source string, force bool) {
 }
 
 // AdoptPlace sets the place based on another photo.
-func (m *Photo) AdoptPlace(other Photo, source string, force bool) {
-	if SrcPriority[m.PlaceSrc] > SrcPriority[source] && !force {
+func (m *Photo) AdoptPlace(other *Photo, source string, force bool) {
+	if other == nil {
+		return
+	} else if SrcPriority[m.PlaceSrc] > SrcPriority[source] && !force {
 		return
 	} else if other.Place == nil {
 		return
@@ -259,7 +261,7 @@ func (m *Photo) LoadPlace() error {
 // Position returns the coordinates as geo.Position.
 func (m *Photo) Position() geo.Position {
 	return geo.Position{Name: m.String(), Time: m.TakenAt.UTC(),
-		Lat: float64(m.PhotoLat), Lng: float64(m.PhotoLng), Altitude: float64(m.PhotoAltitude)}
+		Lat: m.PhotoLat, Lng: m.PhotoLng, Altitude: float64(m.PhotoAltitude)}
 }
 
 // HasLatLng checks if the photo has a latitude and longitude.
@@ -330,9 +332,9 @@ func (m *Photo) CountryCode() string {
 
 // GetTakenAt returns UTC time for TakenAtLocal.
 func (m *Photo) GetTakenAt() time.Time {
-	location, err := time.LoadLocation(m.TimeZone)
+	location := txt.TimeZone(m.TimeZone)
 
-	if err != nil {
+	if location == nil {
 		return m.TakenAt
 	}
 
@@ -345,9 +347,9 @@ func (m *Photo) GetTakenAt() time.Time {
 
 // GetTakenAtLocal returns local time for TakenAt.
 func (m *Photo) GetTakenAtLocal() time.Time {
-	location, err := time.LoadLocation(m.TimeZone)
+	location := txt.TimeZone(m.TimeZone)
 
-	if err != nil {
+	if location == nil {
 		return m.TakenAtLocal
 	}
 
@@ -452,8 +454,8 @@ func (m *Photo) SaveLocation() error {
 
 	m.GetDetails().Keywords = strings.Join(txt.UniqueWords(w), ", ")
 
-	if err := m.SyncKeywordLabels(); err != nil {
-		log.Errorf("photo: %s %s while syncing keywords and labels", m.String(), err)
+	if err := m.UpdateKeywordLabels(); err != nil {
+		log.Errorf("photo: %s %s while updating keyword labels", m.String(), err)
 	}
 
 	if err := m.UpdateTitle(m.ClassifyLabels()); err != nil {

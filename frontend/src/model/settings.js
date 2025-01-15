@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2018 - 2023 PhotoPrism UG. All rights reserved.
+Copyright (c) 2018 - 2024 PhotoPrism UG. All rights reserved.
 
     This program is free software: you can redistribute it and/or modify
     it under Version 3 of the GNU Affero General Public License (the "AGPL"):
@@ -35,6 +35,18 @@ export class Settings extends Model {
     return this[area][key] !== this.__originalValues[area][key];
   }
 
+  setValues(values, scalarOnly) {
+    if (!values) return;
+
+    if (values.maps?.style === "basic" || values.maps?.style === "offline") {
+      values.maps.style = "";
+    }
+
+    super.setValues(values, scalarOnly);
+
+    return this;
+  }
+
   load() {
     return Api.get("settings").then((response) => {
       return Promise.resolve(this.setValues(response.data));
@@ -42,9 +54,7 @@ export class Settings extends Model {
   }
 
   save() {
-    return Api.post("settings", this.getValues(true)).then((response) =>
-      Promise.resolve(this.setValues(response.data))
-    );
+    return Api.post("settings", this.getValues(true)).then((response) => Promise.resolve(this.setValues(response.data)));
   }
 }
 

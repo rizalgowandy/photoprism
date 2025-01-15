@@ -5,9 +5,9 @@ import (
 
 	"github.com/dustin/go-humanize/english"
 
+	"github.com/photoprism/photoprism/internal/ai/face"
 	"github.com/photoprism/photoprism/internal/entity"
-	"github.com/photoprism/photoprism/internal/face"
-	"github.com/photoprism/photoprism/internal/query"
+	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/pkg/clusters"
 )
 
@@ -40,7 +40,7 @@ func (w *Faces) Cluster(opt FacesOptions) (added entity.Faces, err error) {
 		var c clusters.HardClusterer
 
 		// See https://dl.photoprism.app/research/ for research on face clustering algorithms.
-		if c, err = clusters.DBSCAN(face.ClusterCore, face.ClusterDist, w.conf.Workers(), clusters.EuclideanDist); err != nil {
+		if c, err = clusters.DBSCAN(face.ClusterCore, face.ClusterDist, w.conf.IndexWorkers(), clusters.EuclideanDist); err != nil {
 			return added, err
 		} else if err = c.Learn(embeddings.Float64()); err != nil {
 			return added, err
@@ -72,13 +72,13 @@ func (w *Faces) Cluster(opt FacesOptions) (added entity.Faces, err error) {
 
 		for _, cluster := range results {
 			if f := entity.NewFace("", entity.SrcAuto, cluster); f == nil {
-				log.Errorf("faces: face should not be nil - possible bug")
+				log.Errorf("faces: face should not be nil - you may have found a bug")
 			} else if f.SkipMatching() {
 				log.Infof("faces: skipped cluster %s, embedding not distinct enough", f.ID)
 			} else if err := f.Create(); err == nil {
 				added = append(added, *f)
 				log.Debugf("faces: added cluster %s based on %s, radius %f", f.ID, english.Plural(f.Samples, "sample", "samples"), f.SampleRadius)
-			} else if err := f.Updates(entity.Values{"UpdatedAt": entity.TimeStamp()}); err != nil {
+			} else if err := f.Updates(entity.Map{"UpdatedAt": entity.Now()}); err != nil {
 				log.Errorf("faces: %s", err)
 			} else {
 				log.Debugf("faces: updated cluster %s", f.ID)

@@ -1,97 +1,109 @@
 package entity
 
-var CameraMakes = map[string]string{
-	"OLYMPUS":                 "Olympus",
-	"OLYMPUS CORPORATION":     "Olympus",
-	"OLYMPUS DIGITAL CAMERA":  "Olympus",
-	"OLYMPUS IMAGING CORP.":   "Olympus",
-	"OLYMPUS OPTICAL CO.,LTD": "Olympus",
-	"samsung":                 "Samsung",
-}
+const (
+	MakeNone           = ""
+	MakeAcer           = "Acer"
+	MakeApple          = "Apple"
+	MakeAsus           = "ASUS"
+	MakeCanon          = "Canon"
+	MakeNikon          = "NIKON"
+	MakeGoogle         = "Google"
+	MakeMotorola       = "Motorola"
+	MakeLG             = "LG"
+	MakeHTC            = "HTC"
+	MakeGoPro          = "GoPro"
+	MakeCasio          = "CASIO"
+	MakeKodak          = "KODAK"
+	MakeLeica          = "Leica"
+	MakeOlympus        = "Olympus"
+	MakeMinolta        = "Minolta"
+	MakeKonicaMinolta  = "Konica Minolta"
+	MakePentax         = "PENTAX"
+	MakeSamsung        = "Samsung"
+	MakeSony           = "SONY"
+	MakeSharp          = "SHARP"
+	MakeHuawei         = "HUAWEI"
+	MakeXiaomi         = "Xiaomi"
+	MakeFuji           = "FUJIFILM"
+	MakeBlackBerry     = "BlackBerry"
+	MakeRaspberryPi    = "Raspberry Pi"
+	MakePolaroid       = "Polaroid"
+	MakeHasselblad     = "Hasselblad"
+	MakeSigma          = "SIGMA"
+	MakeOnePlus        = "OnePlus"
+	MakeHewlettPackard = "HP"
+	MakeGarmin         = "Garmin"
+	MakeRicoh          = "RICOH"
+	MakeReolink        = "Reolink"
+	MakeVenTrade       = "VenTrade"
+)
 
-var CameraModels = map[string]string{
-	"iPhone SE (1st generation)": "iPhone SE",
-	"iPhone SE (2nd generation)": "iPhone SE",
-	"iPhone SE (3rd generation)": "iPhone SE",
-	"WAS-LX1":                    "P10 lite",
-	"WAS-LX2":                    "P10 lite",
-	"WAS-LX3":                    "P10 lite",
-	"WAS-LX1A":                   "P10 lite",
-	"WAS-LX2J":                   "P10 lite",
-	"WAS-L03T":                   "P10 lite",
-	"WAS-AL00":                   "P10 lite",
-	"WAS-TL10":                   "P10 lite",
-	"VTR-L29":                    "P10",
-	"VTR-AL00":                   "P10",
-	"VTR-TL00":                   "P10",
-	"VTR-L09":                    "P10",
-	"EML-AL00":                   "P20",
-	"EML-L09":                    "P20",
-	"EML-L09C":                   "P20",
-	"EML-L29":                    "P20",
-	"EML-L29C":                   "P20",
-	"CLT-AL00":                   "P20 Pro",
-	"CLT-AL01":                   "P20 Pro",
-	"CLT-TL01":                   "P20 Pro",
-	"CLT-L09":                    "P20 Pro",
-	"CLT-L29":                    "P20 Pro",
-	"ELE-L29":                    "P30",
-	"ELE-AL00":                   "P30",
-	"ELE-L04":                    "P30",
-	"ELE-L09":                    "P30",
-	"ELE-TL00":                   "P30",
-	"VOG-L29":                    "P30 Pro",
-	"VOG-L09":                    "P30 Pro",
-	"VOG-L04":                    "P30 Pro",
-	"VOG-AL00":                   "P30 Pro",
-	"VOG-AL10":                   "P30 Pro",
-	"VOG-TL00":                   "P30 Pro",
-	"MAR-L01A":                   "P30 lite",
-	"MAR-L21A":                   "P30 lite",
-	"MAR-LX1A":                   "P30 lite",
-	"MAR-LX1M":                   "P30 lite",
-	"MAR-LX2":                    "P30 lite",
-	"MAR-L21MEA":                 "P30 lite",
-	"MAR-L22A":                   "P30 lite",
-	"MAR-L22B":                   "P30 lite",
-	"MAR-LX3A":                   "P30 lite",
-	"ANA-AN00":                   "P40",
-	"ANA-TN00":                   "P40",
-	"ELS-AN00":                   "P40 Pro",
-	"ELS-TN00":                   "P40 Pro",
-	"ELS-NX9":                    "P40 Pro",
-	"ELS-N04":                    "P40 Pro",
-	"JNY-L21A":                   "P40 lite",
-	"JNY-L01A":                   "P40 lite",
-	"JNY-L21B":                   "P40 lite",
-	"JNY-L22A":                   "P40 lite",
-	"JNY-L02A":                   "P40 lite",
-	"JNY-L22B":                   "P40 lite",
-	"STK-LX1":                    "Honor 9X",
-	"HLK-AL00":                   "Honor 9X",
-	"HLK-TL00":                   "Honor 9X",
-	"SNE-AL00":                   "Mate 20 lite",
-	"SNE-LX1":                    "Mate 20 lite",
-	"SNE-LX2":                    "Mate 20 lite",
-	"SNE-LX3":                    "Mate 20 lite",
-	"INE-LX2":                    "Mate 20 lite",
-	"HMA-L29":                    "Mate 20",
-	"HMA-L09":                    "Mate 20",
-	"HMA-LX9":                    "Mate 20",
-	"HMA-AL00":                   "Mate 20",
-	"HMA-TL00":                   "Mate 20",
-	"LYA-L09":                    "Mate 20 Pro",
-	"LYA-L29":                    "Mate 20 Pro",
-	"LYA-AL00":                   "Mate 20 Pro",
-	"LYA-AL10":                   "Mate 20 Pro",
-	"LYA-TL00":                   "Mate 20 Pro",
-	"LYA-L0C":                    "Mate 20 Pro",
-	"TAS-L09":                    "Mate 30",
-	"TAS-L29":                    "Mate 30",
-	"TAS-AL00":                   "Mate 30",
-	"TAS-TL00":                   "Mate 30",
-	"LIO-L09":                    "Mate 30 Pro",
-	"LIO-L29":                    "Mate 30 Pro",
-	"LIO-AL00":                   "Mate 30 Pro",
-	"LIO-TL00":                   "Mate 30 Pro",
+// CameraMakes maps internal make identifiers to normalized names.
+var CameraMakes = map[string]string{
+	"acer":                        MakeAcer,
+	"ACER":                        MakeAcer,
+	"asus":                        MakeAsus,
+	"Asus":                        MakeAsus,
+	"ASUS_AI2302":                 MakeAsus,
+	"apple":                       MakeApple,
+	"Casio":                       MakeCasio,
+	"CASIO COMPUTER":              MakeCasio,
+	"CASIO COMPUTER CO":           MakeCasio,
+	"CASIO COMPUTER CO.":          MakeCasio,
+	"CASIO COMPUTER CO.,LTD":      MakeCasio,
+	"CASIO COMPUTER CO.,LTD.":     MakeCasio,
+	"CASIO CORPORATION":           MakeCasio,
+	"Fujifilm":                    MakeFuji,
+	"FUJIFILM CORPORATION":        MakeFuji,
+	"Garmin-Asus":                 MakeGarmin,
+	"google":                      MakeGoogle,
+	"GOOGLE":                      MakeGoogle,
+	"U63667E4U111368":             MakeGoogle,
+	"Hewlett-Packard":             MakeHewlettPackard,
+	"htc":                         MakeHTC,
+	"Kodak":                       MakeKodak,
+	"EASTMAN KODAK":               MakeKodak,
+	"EASTMAN KODAK COMPANY":       MakeKodak,
+	"GCMC":                        MakeKodak,
+	"Leica Camera AG":             MakeLeica,
+	"LEICA":                       MakeLeica,
+	"LG Electronics":              MakeLG,
+	"LGE":                         MakeLG,
+	"lge":                         MakeLG,
+	"Minolta Co., Ltd.":           MakeMinolta,
+	"MINOLTA CO.,LTD":             MakeMinolta,
+	"KONICA MINOLTA":              MakeKonicaMinolta,
+	"Motorol":                     MakeMotorola,
+	"Motorola Mobility":           MakeMotorola,
+	"motorola":                    MakeMotorola,
+	"samsung":                     MakeSamsung,
+	"SAMSUNG":                     MakeSamsung,
+	"Samsung Electronics":         MakeSamsung,
+	"SAMSUNG TECHWIN Co.":         MakeSamsung,
+	"SAMSUNG TECHWIN":             MakeSamsung,
+	"Samsung Techwin":             MakeSamsung,
+	"sharp":                       MakeSharp,
+	"Sharp":                       MakeSharp,
+	"sigma":                       MakeSigma,
+	"Sigma":                       MakeSigma,
+	"OLYMPUS":                     MakeOlympus,
+	"OLYMPUS CORPORATION":         MakeOlympus,
+	"OLYMPUS DIGITAL CAMERA":      MakeOlympus,
+	"OLYMPUS IMAGING CORP.":       MakeOlympus,
+	"OLYMPUS OPTICAL CO.,LTD":     MakeOlympus,
+	"ONEPLUS":                     MakeOnePlus,
+	"Nikon":                       MakeNikon,
+	"NIKON CORPORATION":           MakeNikon,
+	"Huawei":                      MakeHuawei,
+	"XIAOMI":                      MakeXiaomi,
+	"RaspberryPi":                 MakeRaspberryPi,
+	"RICOH IMAGING COMPANY, LTD.": MakeRicoh,
+	"Ricoh":                       MakeRicoh,
+	"Pentax":                      MakePentax,
+	"PENTAX Corporation":          MakePentax,
+	"PENTAX CORPORATION":          MakePentax,
+	"Blackberry":                  MakeBlackBerry,
+	"Research In Motion":          MakeBlackBerry,
+	"Sony":                        MakeSony,
+	"VenTrade GmbH, Germany":      MakeVenTrade,
 }

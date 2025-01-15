@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/photoprism/photoprism/internal/pwa"
+	"github.com/photoprism/photoprism/internal/config/pwa"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
 	"github.com/photoprism/photoprism/pkg/txt"
@@ -14,7 +14,7 @@ import (
 func (c *Config) AppName() string {
 	name := strings.TrimSpace(c.options.AppName)
 
-	if c.NoSponsor() || name == "" {
+	if name == "" {
 		name = c.SiteTitle()
 	}
 
@@ -44,7 +44,7 @@ func (c *Config) AppMode() string {
 func (c *Config) AppIcon() string {
 	defaultIcon := "logo"
 
-	if c.NoSponsor() || c.options.AppIcon == "" || c.options.AppIcon == defaultIcon {
+	if c.options.AppIcon == "" || c.options.AppIcon == defaultIcon {
 		// Default.
 	} else if strings.Contains(c.options.AppIcon, "/") {
 		return c.options.AppIcon
@@ -95,11 +95,14 @@ func (c *Config) AppManifest() *pwa.Manifest {
 
 		return cacheData.(*pwa.Manifest)
 	}
+
 	result := pwa.NewManifest(c.AppConfig())
+
 	if result != nil {
 		Cache.SetDefault(CacheKeyAppManifest, result)
 	} else {
-		log.Warnf("config: web app manifest is nil - possible bug")
+		log.Warnf("config: web app manifest is nil - you may have found a bug")
 	}
+
 	return result
 }

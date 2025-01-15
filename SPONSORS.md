@@ -4,7 +4,7 @@ Your [continued support](https://link.photoprism.app/membership) helps us [provi
 
 You are [welcome to contact us](https://www.photoprism.app/contact) for change requests, membership questions, and business partnerships.
 
-[Support Our Mission ›](https://link.photoprism.app/membership) [Contact Us ›](https://www.photoprism.app/contact)
+[View Membership FAQ ›](https://www.photoprism.app/kb/membership) [Contact Us ›](https://www.photoprism.app/contact)
 
 ## Platinum Sponsors ##
 
@@ -15,6 +15,18 @@ You are [welcome to contact us](https://www.photoprism.app/contact) for change r
 [**@ppibburr**](https://github.com/ppibburr) (GitHub Sponsors, December 2021)
 
 [**Arto Bendiken**](https://github.com/artob) (GitHub Sponsors, March 2023)
+
+**Marko Eckert** (Patreon, May 2023)
+
+**Vitold Romanovski** (May 2023)
+
+**Aaron C. de Bruyn** (September 2023)
+
+[**Patrick Kvaksrud**](https://github.com/Kvaksrud) (October 2023)
+
+[**Lars Kusch**](https://github.com/LarsK1) (December 2023)
+
+**Joseph Hobbs** (November 2024)
 
 ## Gold Sponsors ##
 
@@ -63,6 +75,14 @@ You are [welcome to contact us](https://www.photoprism.app/contact) for change r
 [**Toly Rugalev**](https://github.com/AnatolyRugalev) (GitHub Sponsors, March 2023)
 
 [**Yongho Lee**](https://github.com/lyh16) (Patreon, May 2023)
+
+**Albert R** (Patreon, August 2023)
+
+**Peter Galbavy** (Patreon, November 2023)
+
+**Andreas Kjeldsberg Pihl** (Patreon, August 2023)
+
+[**Kevin "BentoFox" Gelking**](https://github.com/KevinGelking) (Patreon, December 2024)
 
 ## Infrastructure Sponsors ##
 

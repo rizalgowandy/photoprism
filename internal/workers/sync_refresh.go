@@ -3,14 +3,14 @@ package workers
 import (
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/mutex"
-	"github.com/photoprism/photoprism/internal/remote"
-	"github.com/photoprism/photoprism/internal/remote/webdav"
+	"github.com/photoprism/photoprism/internal/service"
+	"github.com/photoprism/photoprism/internal/service/webdav"
 	"github.com/photoprism/photoprism/pkg/media"
 )
 
 // Updates the local list of remote files so that they can be downloaded in batches
 func (w *Sync) refresh(a entity.Service) (complete bool, err error) {
-	if a.AccType != remote.ServiceWebDAV {
+	if a.AccType != service.WebDAV {
 		return false, nil
 	}
 
@@ -71,16 +71,16 @@ func (w *Sync) refresh(a entity.Service) (complete bool, err error) {
 			f = entity.FirstOrCreateFileSync(f)
 
 			if f == nil {
-				log.Errorf("sync: file sync entity should not be nil - possible bug")
+				log.Errorf("sync: file sync entity should not be nil - you may have found a bug")
 				continue
 			}
 
 			if f.Status == entity.FileSyncIgnore && a.SyncRaw && (content == media.Raw || content == media.Video) {
-				w.logError(f.Update("Status", entity.FileSyncNew))
+				w.logErr(f.Update("Status", entity.FileSyncNew))
 			}
 
 			if f.Status == entity.FileSyncDownloaded && !f.RemoteDate.Equal(file.Date) {
-				w.logError(f.Updates(map[string]interface{}{
+				w.logErr(f.Updates(map[string]interface{}{
 					"Status":     entity.FileSyncNew,
 					"RemoteDate": file.Date,
 					"RemoteSize": file.Size,

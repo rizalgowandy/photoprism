@@ -1,4 +1,4 @@
-/* Carbon Theme */
+/* Carbon Dark Theme */
 
 body.dark-theme.theme-carbon,
 .theme-carbon .v-content__wrap,
@@ -45,7 +45,8 @@ body.dark-theme.theme-carbon,
     background: #302c3d;
 }
 
-#photoprism.theme-carbon .theme--light.v-input--selection-controls.v-input--is-disabled .v-icon {
+#photoprism.theme-carbon .theme--light.v-input--selection-controls.v-input--is-disabled .v-icon,
+#photoprism.theme-carbon .theme--light.v-input--selection-controls.v-input--is-disabled .accent--text {
     color: #999 !important;
 }
 
